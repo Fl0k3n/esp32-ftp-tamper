@@ -10,7 +10,7 @@ class FTPServer {
 
 public:
     FTPServer();
-    void mainFtpLoop();
+    void run();
 
 private:
     FTPControlProcess controlProcess;

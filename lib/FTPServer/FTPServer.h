@@ -7,14 +7,15 @@
 #include "CommandProcessor/FTPCommandProcessor.h"
 
 class FTPServer {
+private:
+    WiFiServer* serverSocket;
+
+    void acceptConnection();
+    static void handleConnection(void* rtosArgs);
 
 public:
     FTPServer();
-    void mainFtpLoop();
-
-private:
-    FTPControlProcess controlProcess;
-    FTPCommandProcessor commandProcessor;
+    void run();
 };
 
 #endif

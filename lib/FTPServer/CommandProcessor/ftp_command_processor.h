@@ -3,7 +3,6 @@
 
 #include <WiFi.h>
 
-#include 
 
 #define DATA_SERVER_PORT 50009
 
@@ -13,7 +12,7 @@ public:
     FTPCommandProcessor();
 
 private:
-    WiFiServer dataServer;
+    WiFiServer* dataServer;
 
 };
 

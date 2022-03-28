@@ -10,11 +10,12 @@
 class FTPControlProcess {
 
 public:
-    FTPControlProcess(FTPCommandProcessor = FTPCommandProcessor());
+    FTPControlProcess(FTPCommandProcessor*);
+    ~FTPControlProcess();
 
 private:
-    WiFiServer controlServer;
-    FTPCommandProcessor commandProcessor;
+    WiFiServer* controlServer;
+    FTPCommandProcessor* commandProcessor;
 };
 
 #endif

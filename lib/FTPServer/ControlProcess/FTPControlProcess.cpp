@@ -1,8 +1,12 @@
 #include "FTPControlProcess.h"
 
-FTPControlProcess::FTPControlProcess(FTPCommandProcessor commandProcessor) {
-    this->commandProcessor = commandProcessor;
+FTPControlProcess::FTPControlProcess(FTPCommandProcessor* commandProcessor) : commandProcessor(commandProcessor) {
+    controlServer = new WiFiServer(CONTROL_SERVER_PORT);
+    controlServer->begin();
 
-    this->controlServer = WiFiServer(CONTROL_SERVER_PORT);
-    this->controlServer.begin();
+    Serial.printf("Control Processor listening at %d\n", CONTROL_SERVER_PORT);
+}
+
+FTPControlProcess::~FTPControlProcess() {
+    delete controlServer;
 }

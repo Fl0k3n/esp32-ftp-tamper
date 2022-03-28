@@ -12,10 +12,10 @@
 TaskHandle_t FTPServerTask;
 
 void ftpServerTask(void*) {
+    Serial.println("starting server...");
+
     FTPServer ftpServer = FTPServer();
-    while (1) {
-        ftpServer.mainFtpLoop();
-    }
+    ftpServer.run();
 }
 
 void initSD() {
@@ -23,7 +23,7 @@ void initSD() {
         Serial.println("SD card successfully initialized");
     else {
         Serial.println("Error: SD card initialization failed");
-        loop(); // wanted to do something to jump to the loop and stop the server from continuing initialization, but doesnt work this way
+        while (true) {} // maybe we can reset the board instead of this
     }
 }
 
@@ -31,7 +31,7 @@ void checkWiFiConnectionTimeout(int* tries) {
     *tries++;
     if (*tries == WIFI_INIT_TIMEOUT) {
         Serial.println("\nError: Unable to connect to WiFi with given ssid and password");
-        loop(); // wanted to do something to jump to the loop and stop the server from continuing initialization, but doesnt work this way
+        while (true) {} // maybe we can reset the board instead of this
     }
 }
 
@@ -59,14 +59,15 @@ void setup() {
     initSD();
     connectToWiFi();
 
-    xTaskCreatePinnedToCore(
+    // serial didnt work with pinned to core 1, no idea why
+    xTaskCreate(
         ftpServerTask,          //Function to implement the task 
         "FTPServer",            //Name of the task
-        6000,                   //Stack size in words 
+        8192,                   //Stack size in words 
         NULL,                   //Task input parameter 
-        0,                      //Priority of the task 
-        &FTPServerTask,         //Task handle.
-        1);                     //Core where the task should run 
+        5,                      //Priority of the task 
+        &FTPServerTask         //Task handle.
+    );                     //Core where the task should run 
 }
 
 void loop() {

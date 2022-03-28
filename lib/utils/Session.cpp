@@ -1,6 +1,7 @@
 #include "Session.h"
 
 Session::Session(WiFiClient* commandSock) : commandSocket(commandSock) {
+    // init session, working dir = /, etc...
 }
 
 Session::~Session() {

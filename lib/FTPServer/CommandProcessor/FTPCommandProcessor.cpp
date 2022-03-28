@@ -1,18 +1,24 @@
 #include "FTPCommandProcessor.h"
 
-FTPCommandProcessor::FTPCommandProcessor(Session* session)
-    : session(session) {}
+FTPCommandProcessor::FTPCommandProcessor(Session* session, AccessControlHandler* commandHandler,
+    FTPServiceHandler* ftpServiceHandler, TransferParametersHandler* transferParametersHandler)
+    : session(session), accessControlHandler(commandHandler),
+    ftpServiceHandler(ftpServiceHandler), transferParametersHandler(transferParametersHandler) {}
 
 
 void FTPCommandProcessor::listenForCommands() {
     WiFiClient* commandSocket = session->getCommandSocket();
+
+    commandSocket->print(ResponseMessage("220", "Service ready").encode());
     Serial.println("Listenning for commands...");
 
     while (true) {
         if (!commandSocket->connected()) {
             handleDisconnected();
+            return;
         }
-        else if (commandSocket->available()) {
+
+        if (commandSocket->available()) {
             bool isMessageFullyRcvd = processSocketInput();
 
             if (isMessageFullyRcvd)
@@ -25,7 +31,7 @@ void FTPCommandProcessor::listenForCommands() {
 
 
 void FTPCommandProcessor::handleDisconnected() {
-    // TODO terminate rtos task, cleanup
+    // we might add some cleanup here
     Serial.println("client disconnected");
 }
 
@@ -54,8 +60,6 @@ bool FTPCommandProcessor::processSocketInput() {
             CR_charFound = false;
         }
     }
-    Serial.println("GOT");
-    Serial.println(buff);
 
     session->setMessageBuff(buff);
     return entireMessageRcvd;
@@ -66,8 +70,21 @@ void FTPCommandProcessor::handleMessage() {
     String rawMessage = session->getMessageBuff();
     session->clearMessageBuff();
 
-    Message msg = Message::buildFromString(rawMessage);
+    CommandMessage msg = CommandMessage::decode(rawMessage);
     msg.print();
 
-    // if (msg.command == "...") else if...
+    // TODO if we won't need to pass more specific params we can make a single interface for these handlers
+    if (accessControlHandler->canHandle(&msg)) {
+        accessControlHandler->handleMessage(&msg, session);
+    }
+    else if (ftpServiceHandler->canHandle(&msg)) {
+        ftpServiceHandler->handleMessage(&msg, session);
+    }
+    else if (transferParametersHandler->canHandle(&msg)) {
+        transferParametersHandler->handleMessage(&msg, session);
+    }
+    else {
+        Serial.println("got unexpected message");
+        msg.print();
+    }
 }

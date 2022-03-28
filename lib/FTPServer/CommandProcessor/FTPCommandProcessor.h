@@ -3,24 +3,25 @@
 
 #include <WiFi.h>
 #include "Session.h"
-#include "Message.h"
+#include "CommandMessage.h"
 #include "handlers/FTPServiceHandler.h"
-#include "handlers/AccessControlHandler.h"
 #include "handlers/TransferParametersHandler.h"
-
-#define DATA_SERVER_PORT 50009
+#include "handlers/AccessControlHandler.h"
 
 class FTPCommandProcessor {
 private:
     Session* session;
-    TaskHandle_t task;
+    AccessControlHandler* accessControlHandler;
+    FTPServiceHandler* ftpServiceHandler;
+    TransferParametersHandler* transferParametersHandler;
 
     void handleDisconnected();
+
     bool processSocketInput();
     void handleMessage();
 
 public:
-    FTPCommandProcessor(Session*);
+    FTPCommandProcessor(Session*, AccessControlHandler*, FTPServiceHandler*, TransferParametersHandler*);
     void listenForCommands();
 };
 

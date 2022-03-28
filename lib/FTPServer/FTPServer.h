@@ -1,21 +1,41 @@
 #ifndef FTP_SERVER
 #define FTP_SERVER
 
+#define CONTROL_SERVER_PORT 21
+
 #include <WiFi.h>
 
-#include "ControlProcess/FTPControlProcess.h"
 #include "CommandProcessor/FTPCommandProcessor.h"
+#include "CommandProcessor/handlers/AccessControlHandler.h"
+
+typedef struct CommandProcessorParams {
+    WiFiServer* serverSocket;
+    AccessControlHandler* accessControlHandler;
+    FTPServiceHandler* ftpServiceHandler;
+    TransferParametersHandler* transferParametersHandler;
+} CommandProcessorParams;
+
 
 class FTPServer {
 private:
-    WiFiServer* serverSocket;
+    WiFiServer serverSocket;
 
-    void acceptConnection();
-    static void handleConnection(void* rtosArgs);
+    AccessControlHandler* accessControlHandler;
+    FTPServiceHandler* ftpServiceHandler;
+    TransferParametersHandler* transferParametersHandler;
+
+    void acceptConnection(CommandProcessorParams*);
+
+    // can't pass 'this' to rtos task
+    static void handleConnection(void* rtosArgs); // cast to CommandProcessorParams
 
 public:
-    FTPServer();
+    // handlers should be configured externally and injected here, i assume that they will be singletons
+    // and if so, they should be thread safe (if we ever will handle multiple connections)
+    FTPServer(AccessControlHandler*, FTPServiceHandler*, TransferParametersHandler*);
     void run();
 };
+
+
 
 #endif

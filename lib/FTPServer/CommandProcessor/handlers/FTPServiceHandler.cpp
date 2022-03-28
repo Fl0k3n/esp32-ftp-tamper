@@ -1,6 +1,13 @@
 #include "FTPServiceHandler.h"
 
 FTPServiceHandler::FTPServiceHandler() {
-    this->currentWorkingDirectory = "/";
-    this->filePath = "";
+
+}
+
+bool FTPServiceHandler::canHandle(CommandMessage*) {
+    return false;
+}
+
+void FTPServiceHandler::handleMessage(CommandMessage*, Session*) {
+
 }

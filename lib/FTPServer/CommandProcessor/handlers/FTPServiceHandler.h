@@ -3,14 +3,18 @@
 
 #include <Arduino.h>
 
-class FTPServiceHandler {
+#include "CommandMessage.h"
+#include "ResponseMessage.h"
+#include "Session.h"
 
+#define DATA_SERVER_PORT 50009
+
+
+class FTPServiceHandler {
 public:
     FTPServiceHandler();
-
-private:
-    String currentWorkingDirectory;
-    String filePath;
+    bool canHandle(CommandMessage*);
+    void handleMessage(CommandMessage*, Session*);
 };
 
 #endif

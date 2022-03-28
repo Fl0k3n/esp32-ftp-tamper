@@ -1,3 +1,6 @@
+#ifndef SESSION
+#define SESSION
+
 #include <WiFi.h>
 
 enum SessionStatus {
@@ -11,7 +14,7 @@ enum SessionStatus {
 class Session {
 private:
     WiFiClient* commandSocket;
-    WiFiClient* dataSocket;
+    WiFiClient* dataSocket; // not used yet
 
     SessionStatus sessionStatus;
     String workingDirectory;
@@ -28,3 +31,5 @@ public:
     void setMessageBuff(String buff);
     void clearMessageBuff();
 };
+
+#endif

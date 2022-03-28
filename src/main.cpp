@@ -14,7 +14,11 @@ TaskHandle_t FTPServerTask;
 void ftpServerTask(void*) {
     Serial.println("starting server...");
 
-    FTPServer ftpServer = FTPServer();
+    AccessControlHandler accessControlHandler(ftp_username, ftp_password);
+    FTPServiceHandler ftpServiceHandler;
+    TransferParametersHandler transferParametersHandler;
+
+    FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
     ftpServer.run();
 }
 
@@ -28,7 +32,7 @@ void initSD() {
 }
 
 void checkWiFiConnectionTimeout(int* tries) {
-    *tries++;
+    (*tries)++;
     if (*tries == WIFI_INIT_TIMEOUT) {
         Serial.println("\nError: Unable to connect to WiFi with given ssid and password");
         while (true) {} // maybe we can reset the board instead of this

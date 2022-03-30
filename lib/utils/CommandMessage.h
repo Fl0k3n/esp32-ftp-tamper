@@ -1,7 +1,7 @@
 #ifndef COMMAND_MESSAGE
 #define COMMAND_MESSAGE
 
-#define COMMAND_LENGTH 4
+#define MIN_COMMAND_LENGTH 3
 #define DELIM_LENGTH 2 // length of \r\n
 
 #include <Arduino.h>
@@ -16,11 +16,18 @@ public:
 
     static CommandMessage decode(String rawMessage) {
         // not the most elegant solution but we probably shouldnt use exceptions 
-        if (rawMessage.length() < COMMAND_LENGTH + DELIM_LENGTH)
+        if (rawMessage.length() < MIN_COMMAND_LENGTH + DELIM_LENGTH)
             return CommandMessage("_ERR", rawMessage);
 
-        String command = rawMessage.substring(0, COMMAND_LENGTH);
-        String data = rawMessage.substring(COMMAND_LENGTH + 1, rawMessage.length() - DELIM_LENGTH);
+        int sp = rawMessage.indexOf(" ");
+        if (sp == -1)
+            sp = rawMessage.indexOf("\r");
+
+        String command = rawMessage.substring(0, sp);
+        String data = rawMessage.substring(sp + 1, rawMessage.length() - DELIM_LENGTH);
+
+        if (rawMessage.length() - sp <= DELIM_LENGTH)
+            data = "";
 
         return CommandMessage(command, data);
     }

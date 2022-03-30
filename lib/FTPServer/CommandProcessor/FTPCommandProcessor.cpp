@@ -12,10 +12,20 @@ void FTPCommandProcessor::listenForCommands() {
     commandSocket->print(ResponseMessage("220", "Service ready").encode());
     Serial.println("Listenning for commands...");
 
+    session->setSessionStatus(AWAIT_USERNAME);
+
     while (true) {
-        if (!commandSocket->connected()) {
+        if (!commandSocket->connected() || session->waitingToLogOutAndNoTranfser()) {
             handleDisconnected();
             return;
+        }
+
+        if (session->getSessionStatus() == REINITIALIZATION) {
+            if (session->getTransferStatus() == NO_TRANSFER) {
+                session->init();
+                commandSocket->print(ResponseMessage("220", "Service ready").encode());
+                Serial.println("Reinitialization completed. Listenning for commands...");
+            }
         }
 
         if (commandSocket->available()) {
@@ -31,11 +41,13 @@ void FTPCommandProcessor::listenForCommands() {
 
 
 void FTPCommandProcessor::handleDisconnected() {
-    // we might add some cleanup here
+    ResponseMessage response("221", "Disconnected from the server");
+    session->getCommandSocket()->print(response.encode());
     Serial.println("client disconnected");
 }
 
 // returns true if full command was received
+// 5.3 section
 bool FTPCommandProcessor::processSocketInput() {
     WiFiClient* socket = session->getCommandSocket();
 

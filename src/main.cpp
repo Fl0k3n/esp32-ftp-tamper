@@ -14,8 +14,9 @@ TaskHandle_t FTPServerTask;
 void ftpServerTask(void*) {
     Serial.println("starting server...");
 
+    FTPDataProcessor dataProcessor;
     AccessControlHandler accessControlHandler(ftp_username, ftp_password);
-    FTPServiceHandler ftpServiceHandler;
+    FTPServiceHandler ftpServiceHandler(&dataProcessor);
     TransferParametersHandler transferParametersHandler;
 
     FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
@@ -29,6 +30,27 @@ void initSD() {
         Serial.println("Error: SD card initialization failed");
         while (true) {} // maybe we can reset the board instead of this
     }
+
+    Serial.println("creating test file at /test.txt");
+    File f = SD.open("/test.txt", "w");
+    if (!f) {
+        Serial.println("failed to open");
+        return;
+    }
+
+    char msg[] = "content";
+    int written = f.print(msg);
+
+    Serial.printf("written: %d\n", written);
+
+    f.close();
+
+    f = SD.open("/test.txt", "r");
+
+    String content = f.readString();
+    Serial.print("Got ");
+    Serial.println(content);
+    f.close();
 }
 
 void checkWiFiConnectionTimeout(int* tries) {

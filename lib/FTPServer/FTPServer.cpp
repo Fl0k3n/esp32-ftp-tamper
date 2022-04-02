@@ -53,6 +53,7 @@ void FTPServer::handleConnection(void* rtosArgs) {
     WiFiClient client = params->serverSocket->available();
     Session session(&client);
 
+
     FTPCommandProcessor commandProcessor(&session, params->accessControlHandler,
         params->ftpServiceHandler, params->transferParametersHandler);
 

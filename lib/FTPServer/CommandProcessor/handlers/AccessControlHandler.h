@@ -4,15 +4,14 @@
 #include "CommandMessage.h"
 #include "ResponseMessage.h"
 #include "Session.h"
+#include "FTPCommandHandler.h"
 
-class AccessControlHandler {
+class AccessControlHandler : public FTPCommandHandler {
 private:
     String username;
     String password;
     static const String canHandleCmds[];
     static const int canHandleCmdsNumber = 7;
-
-    void sendReply(Session* session, String replyStatus, String replyText);
 
     String changeDirectory(String, String);
 

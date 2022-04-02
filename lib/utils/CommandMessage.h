@@ -24,6 +24,8 @@ public:
             sp = rawMessage.indexOf("\r");
 
         String command = rawMessage.substring(0, sp);
+        command.toUpperCase();
+
         String data = rawMessage.substring(sp + 1, rawMessage.length() - DELIM_LENGTH);
 
         if (rawMessage.length() - sp <= DELIM_LENGTH)

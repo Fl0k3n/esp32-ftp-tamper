@@ -5,16 +5,28 @@
 
 #include "CommandMessage.h"
 #include "ResponseMessage.h"
+#include "FTPCommandHandler.h"
 #include "Session.h"
+#include "DataProcessor/FTPDataProcessor.h"
 
-#define DATA_SERVER_PORT 50009
 
 
-class FTPServiceHandler {
+class FTPServiceHandler : public FTPCommandHandler {
+private:
+    static const String canHandleCmds[];
+    static const int canHandleCmdsNumber = 18; // can we bypass this somehow? :(
+
+    FTPDataProcessor* dataProcessor;
+
+    void handleRetrCmd(CommandMessage*, Session*);
+    String getFilePath(Session*, String);
+    bool assertValidPathnameArgument(Session*, String);
+
 public:
-    FTPServiceHandler();
+    FTPServiceHandler(FTPDataProcessor*);
     bool canHandle(CommandMessage*);
     void handleMessage(CommandMessage*, Session*);
+    FTPDataProcessor* getFTPDataProcessor();
 };
 
 #endif

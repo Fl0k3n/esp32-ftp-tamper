@@ -1,20 +1,21 @@
 #include "Session.h"
 
-Session::Session(WiFiClient* commandSock) : commandSocket(commandSock) {
-    // init session, working dir = /, etc...
+Session::Session(WiFiClient* commandSock) :
+    commandSocket(commandSock),
+    transferState(commandSock->remoteIP().toString())
+{
     init();
 }
 
 void Session::init() {
     sessionStatus = AWAIT_USERNAME;
-    transferStatus = NO_TRANSFER;
+    mode = ACTIVE; // active is default
     clearMessageBuff();
     workingDirectory = "/";
+    isListenningForData = false;
 }
 
 Session::~Session() {
-    if (dataSocket->connected())
-        dataSocket->stop();
     if (commandSocket->connected())
         commandSocket->stop();
 }
@@ -27,20 +28,9 @@ void Session::setSessionStatus(SessionStatus newSessionStatus) {
     sessionStatus = newSessionStatus;
 }
 
-TransferStatus Session::getTransferStatus() {
-    return transferStatus;
-}
-
-void Session::setTransferStatus(TransferStatus newTransferStatus) {
-    transferStatus = newTransferStatus;
-}
 
 WiFiClient* Session::getCommandSocket() {
     return commandSocket;
-}
-
-WiFiClient* Session::getDataSocket() {
-    return dataSocket;
 }
 
 void Session::setMessageBuff(String buff) {
@@ -55,8 +45,8 @@ void Session::clearMessageBuff() {
     messageBuff = "";
 }
 
-bool Session::waitingToLogOutAndNoTranfser() {
-    return sessionStatus == LOGOUT && transferStatus == NO_TRANSFER;
+bool Session::canBeLoggedOut() {
+    return sessionStatus == LOGOUT && transferState.isDataConnectionClosed();
 }
 
 void Session::setWorkingDirectory(String newWorkingDirectory) {
@@ -65,4 +55,28 @@ void Session::setWorkingDirectory(String newWorkingDirectory) {
 
 String Session::getWorkingDirectory() {
     return workingDirectory;
+}
+
+TransferState* Session::getTransferState() {
+    return &transferState;
+}
+
+bool Session::shouldListenForDataConnections() {
+    return isListenningForData;
+}
+
+
+void Session::startListenningForDataConnection(uint16_t port) {
+    dataServerSocket = WiFiServer(port, 1); // max 1 client
+    dataServerSocket.begin();
+    dataPort = port;
+    isListenningForData = true;
+}
+
+void Session::stopListenningForDataConnection() {
+    isListenningForData = false;
+}
+
+WiFiServer* Session::getDataServerSocket() {
+    return &dataServerSocket;
 }

@@ -2,7 +2,7 @@
 
 FTPCommandProcessor::FTPCommandProcessor(Session* session, AccessControlHandler* commandHandler,
     FTPServiceHandler* ftpServiceHandler, TransferParametersHandler* transferParametersHandler)
-    : session(session), accessControlHandler(commandHandler),
+    : session(session), dataProcessor(ftpServiceHandler->getFTPDataProcessor()), accessControlHandler(commandHandler),
     ftpServiceHandler(ftpServiceHandler), transferParametersHandler(transferParametersHandler) {}
 
 
@@ -15,13 +15,13 @@ void FTPCommandProcessor::listenForCommands() {
     session->setSessionStatus(AWAIT_USERNAME);
 
     while (true) {
-        if (!commandSocket->connected() || session->waitingToLogOutAndNoTranfser()) {
+        if (!commandSocket->connected() || session->canBeLoggedOut()) {
             handleDisconnected();
             return;
         }
 
         if (session->getSessionStatus() == REINITIALIZATION) {
-            if (session->getTransferStatus() == NO_TRANSFER) {
+            if (session->getTransferState()->isDataConnectionClosed()) {
                 session->init();
                 commandSocket->print(ResponseMessage("220", "Service ready").encode());
                 Serial.println("Reinitialization completed. Listenning for commands...");
@@ -35,7 +35,34 @@ void FTPCommandProcessor::listenForCommands() {
                 handleMessage();
         }
 
+        // not sure if this should be here
+        if (session->getTransferState()->isTransferInProgress()) {
+            dataProcessor->handleDataTransfer(session);
+        }
+
+        if (session->shouldListenForDataConnections()) {
+            checkDataConnections();
+        }
+
         vTaskDelay(10 / portTICK_PERIOD_MS); // i think it should be as low as possible, even 1? but also priority of this task should be very low so other tasks may work  
+    }
+}
+
+void FTPCommandProcessor::checkDataConnections() {
+    WiFiServer* dataServerSocket = session->getDataServerSocket();
+
+    if (dataServerSocket->hasClient()) {
+        Serial.println("Got data socket");
+        WiFiClient dataClientSocket = dataServerSocket->available();
+        session->stopListenningForDataConnection();
+
+        TransferState* transferState = session->getTransferState();
+        transferState->dataSocket = dataClientSocket;
+
+        session->getCommandSocket()->print(ResponseMessage("225", "Data connection open; no transfer in progress.").encode());
+    }
+    else {
+        Serial.println("no data connection yet...");
     }
 }
 
@@ -85,7 +112,6 @@ void FTPCommandProcessor::handleMessage() {
     CommandMessage msg = CommandMessage::decode(rawMessage);
     msg.print();
 
-    // TODO if we won't need to pass more specific params we can make a single interface for these handlers
     if (accessControlHandler->canHandle(&msg)) {
         accessControlHandler->handleMessage(&msg, session);
     }

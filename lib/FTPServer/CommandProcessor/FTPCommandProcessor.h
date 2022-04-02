@@ -8,9 +8,11 @@
 #include "handlers/TransferParametersHandler.h"
 #include "handlers/AccessControlHandler.h"
 
+
 class FTPCommandProcessor {
 private:
     Session* session;
+    FTPDataProcessor* dataProcessor;
     AccessControlHandler* accessControlHandler;
     FTPServiceHandler* ftpServiceHandler;
     TransferParametersHandler* transferParametersHandler;
@@ -19,6 +21,8 @@ private:
 
     bool processSocketInput();
     void handleMessage();
+
+    void checkDataConnections();
 
 public:
     FTPCommandProcessor(Session*, AccessControlHandler*, FTPServiceHandler*, TransferParametersHandler*);

@@ -1,6 +1,6 @@
 #include "AccessControlHandler.h"
 
-const String AccessControlHandler::canHandleCmds[canHandleCmdsNumber] = { "USER", "PASS", "AUTH", "CWD", "CDUP", "REIN", "QUIT" };
+const String AccessControlHandler::canHandleCmds[] = { "USER", "PASS", "AUTH", "CWD", "CDUP", "REIN", "QUIT" };
 
 AccessControlHandler::AccessControlHandler(String username, String password)
     : username(username), password(password) {}
@@ -12,19 +12,7 @@ AccessControlHandler::AccessControlHandler(String username, String password)
  *                              identically
 **/
 bool AccessControlHandler::canHandle(CommandMessage* msg) {
-    String cmd = msg->command;
-
-    for (int index = 0; index < canHandleCmdsNumber; index++)
-        if (cmd.equalsIgnoreCase(canHandleCmds[index]))
-            return true;
-    return false;
-}
-
-void AccessControlHandler::sendReply(Session* session, String replyStatus, String replyText) {
-    ResponseMessage response(replyStatus, replyText);
-
-    session->getCommandSocket()->print(response.encode());
-    Serial.println("sent response");
+    return canHandleCommand(msg->command, (String*)canHandleCmds, canHandleCmdsNumber);
 }
 
 
@@ -43,7 +31,6 @@ void AccessControlHandler::handleMessage(CommandMessage* msg, Session* session) 
     }
 
     String command = msg->command;
-    command.toUpperCase();
 
     if (command == "USER") {
         handleUserCmd(msg, session);
@@ -104,6 +91,7 @@ void AccessControlHandler::handlePasswordCmd(CommandMessage* msg, Session* sessi
 
     if (!password.equals(msg->data)) {
         sendReply(session, "530", "Invalid password");
+        return;
     }
 
     Serial.println("got correct password as expected");
@@ -168,8 +156,11 @@ String AccessControlHandler::changeDirectory(String currentWorkingDirectory, Str
         return currentWorkingDirectory.substring(0, end);
     }
 
+
     if (path.charAt(0) == '/')
         return path;
+
+    // TODO assert that path doesn't end with '/' (if its not just "/" itself)
 
     if (currentWorkingDirectory == "/") {
         currentWorkingDirectory.concat(path);

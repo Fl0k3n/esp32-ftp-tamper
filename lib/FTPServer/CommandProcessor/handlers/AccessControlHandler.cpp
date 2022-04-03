@@ -1,10 +1,10 @@
 #include "AccessControlHandler.h"
 
 const String AccessControlHandler::canHandleCmds[] = { "USER", "PASS", "AUTH", "CWD", "CDUP", "REIN", "QUIT" };
+const int AccessControlHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 AccessControlHandler::AccessControlHandler(String username, String password)
     : username(username), password(password) {}
-
 
 /*
  *  5.3. COMMANDS section ->    The command codes are four or fewer alphabetic characters.
@@ -120,7 +120,15 @@ void AccessControlHandler::handleCwdCmd(CommandMessage* msg, Session* session) {
     Serial.println(session->getWorkingDirectory());
 
     String newWorkingDirectory = changeDirectory(session->getWorkingDirectory(), msg->data);
-    // TODO: check if newWorkingDirectory exists on SD, if not, return 550, Directory not found
+
+    bool newWorkingDirectoryExists = SD.exists(newWorkingDirectory);
+    if (!newWorkingDirectoryExists) {
+        Serial.print("Directory not found: ");
+        Serial.println(newWorkingDirectory);
+        sendReply(session, "550", "Directory not found.");
+        return;
+    }
+
     session->setWorkingDirectory(newWorkingDirectory);
 
     Serial.print("New working directory: ");
@@ -156,11 +164,12 @@ String AccessControlHandler::changeDirectory(String currentWorkingDirectory, Str
         return currentWorkingDirectory.substring(0, end);
     }
 
+    if (path.endsWith("/")) {
+        path.remove(path.lastIndexOf('/'), 1);
+    }
 
     if (path.charAt(0) == '/')
         return path;
-
-    // TODO assert that path doesn't end with '/' (if its not just "/" itself)
 
     if (currentWorkingDirectory == "/") {
         currentWorkingDirectory.concat(path);

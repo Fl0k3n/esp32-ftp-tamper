@@ -11,7 +11,7 @@ private:
     String username;
     String password;
     static const String canHandleCmds[];
-    static const int canHandleCmdsNumber = 7;
+    static const int canHandleCmdsNumber;
 
     String changeDirectory(String, String);
 

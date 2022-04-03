@@ -1,7 +1,19 @@
 #include "TransferParametersHandler.h"
 
 const String TransferParametersHandler::canHandleCmds[] = { "PORT", "PASV", "TYPE", "STRU", "MODE" };
+const int TransferParametersHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
+TransferParametersHandler::TransferParametersHandler() {
+    // TODO, server has to choose the port, hardcoded for now
+    dataPort = 50009; // must be unprivilieged >1024
+    IPAddress ip = WiFi.localIP();
+
+    ipStringForPasv = ip.toString();
+    ipStringForPasv.replace(".", ",");
+
+    // h1,h2,h3,h4,p1,p2
+    sprintf(pasvResponse, "%s,%hhu,%hhu", ipStringForPasv.c_str(), dataPort / 256, dataPort % 256);
+}
 
 bool TransferParametersHandler::canHandle(CommandMessage* msg) {
     return canHandleCommand(msg->command, (String*)canHandleCmds, canHandleCmdsNumber);
@@ -12,17 +24,25 @@ void TransferParametersHandler::handleMessage(CommandMessage* msg, Session* sess
     msg->print();
     String cmd = msg->command;
 
+    if (session->getSessionStatus() != AWAIT_COMMAND) {
+        sendReply(session, "530", "Not logged in.");
+        return;
+    }
+
     if (cmd == "PORT") {
         handlePortCmd(msg, session);
     }
     else if (cmd == "PASV") {
         handlePasvCmd(msg, session);
     }
+    else if (cmd == "TYPE") {
+        handleTypeCmd(msg, session);
+    }
     else {
         Serial.println("not implemented");
+        sendReply(session, "502", "Not implemented");
     }
 }
-
 
 void TransferParametersHandler::handlePortCmd(CommandMessage* msg, Session* session) {
     // PORT h1,h2,h3,h4,p1,p2
@@ -54,27 +74,23 @@ void TransferParametersHandler::handlePortCmd(CommandMessage* msg, Session* sess
 
 
 void TransferParametersHandler::handlePasvCmd(CommandMessage* msg, Session* session) {
-    if (session->mode == PASSIVE) {
-        // TODO handle already PASSIVE
+    if (session->getTransferState()->isTransferInProgress()) {
+        // TODO review this section, I guess it shouldnt handle it like that if there is a pasv from a client while transfer in progress
         Serial.println("already in passive");
+        sendPasvResponse(session);
         return;
     }
 
     session->mode = PASSIVE;
+    session->startListenningForDataConnection(dataPort);
+    sendPasvResponse(session);
+}
 
-    // TODO, server has to choose the port, hardcoded for now
-    uint16_t port = 20;
-    IPAddress ip = WiFi.localIP();
+void TransferParametersHandler::sendPasvResponse(Session* session) {
+    sendReply(session, "227", String(pasvResponse));
+    Serial.printf("sent pasv response: ->%s<-\n", pasvResponse);
+}
 
-    session->startListenningForDataConnection(port);
-
-    String ipStr = ip.toString();
-    ipStr.replace(".", ",");
-
-    char buff[24];
-    // h1,h2,h3,h4,p1,p2
-    sprintf(buff, "%s,%hhu,%hhu", ipStr.c_str(), port / 256, port % 256);
-
-    sendReply(session, "227", String(buff));
-    Serial.printf("sent pasv response: ->%s<-\n", buff);
+void TransferParametersHandler::handleTypeCmd(CommandMessage* msg, Session* session) {
+    sendReply(session, "200", "OK"); // hardcoded for now for testing only
 }

@@ -42,12 +42,30 @@ print(ftp.login("username", "password"))
 # print(ftp.quit())
 # time.sleep(3)
 
-input("press to get file")
+# input("press to get file")
 
-data_sock = ftp.transfercmd('RETR test.txt')
+# data_sock = ftp.transfercmd('RETR test.txt')
 
-file = data_sock.recv(1000)
+# file = data_sock.recv(1000)
+# print(file)
+# data_sock.close()
+
+# input("press to disconnect")
+
+
+input("press to upload file")
+
+filename = 'test1.txt'
+print(ftp.storlines("STOR " + filename, open(filename, 'rb')))
+input("press to proceed")
+print(ftp.cwd("/"))
+input("press to proceed")
+print(ftp.sendcmd("NOOP"))
+input("press to proceed")
+data_sock = ftp.transfercmd('RETR test1.txt1')
+
+file = data_sock.recv(10000)
 print(file)
 data_sock.close()
 
-input("press to disconnect")
+input("press to close tester")

@@ -35,13 +35,13 @@ void FTPCommandProcessor::listenForCommands() {
                 handleMessage();
         }
 
+        if (session->shouldListenForDataConnections()) {
+            checkDataConnections();
+        }
+
         // not sure if this should be here
         if (session->getTransferState()->isTransferInProgress()) {
             dataProcessor->handleDataTransfer(session);
-        }
-
-        if (session->shouldListenForDataConnections()) {
-            checkDataConnections();
         }
 
         vTaskDelay(10 / portTICK_PERIOD_MS); // i think it should be as low as possible, even 1? but also priority of this task should be very low so other tasks may work  
@@ -61,8 +61,9 @@ void FTPCommandProcessor::checkDataConnections() {
 
         session->getCommandSocket()->print(ResponseMessage("225", "Data connection open; no transfer in progress.").encode());
     }
-    else {
-        Serial.println("no data connection yet...");
+    else if (!session->getTransferState()->isTransferInProgress()) {
+        // TODO timeout?
+        Serial.println("no data connection yet....");
     }
 }
 

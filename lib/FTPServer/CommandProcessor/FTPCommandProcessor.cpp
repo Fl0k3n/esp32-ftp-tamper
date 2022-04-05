@@ -15,6 +15,7 @@ void FTPCommandProcessor::listenForCommands() {
     session->setSessionStatus(AWAIT_USERNAME);
 
     while (true) {
+        Serial.print("beep\t"); //debug
         if (!commandSocket->connected() || session->canBeLoggedOut()) {
             handleDisconnected();
             return;
@@ -33,14 +34,18 @@ void FTPCommandProcessor::listenForCommands() {
 
             if (isMessageFullyRcvd)
                 handleMessage();
+            else
+                Serial.println("message not fully received");
         }
 
         if (session->shouldListenForDataConnections()) {
+            Serial.print("should\t");
             checkDataConnections();
         }
 
         // not sure if this should be here
-        if (session->getTransferState()->isTransferInProgress()) {
+        if (session->getTransferState()->isTransferInProgress() && !session->shouldListenForDataConnections()) {
+            Serial.print("peeb\t"); //debug
             dataProcessor->handleDataTransfer(session);
         }
 
@@ -59,11 +64,14 @@ void FTPCommandProcessor::checkDataConnections() {
         TransferState* transferState = session->getTransferState();
         transferState->dataSocket = dataClientSocket;
 
-        session->getCommandSocket()->print(ResponseMessage("225", "Data connection open; no transfer in progress.").encode());
+        // session->getCommandSocket()->print(ResponseMessage("225", "Data connection open; no transfer in progress.").encode());
     }
-    else if (!session->getTransferState()->isTransferInProgress()) {
-        // TODO timeout?
-        Serial.println("no data connection yet....");
+    // else if (!session->getTransferState()->isTransferInProgress()) {
+    //     // TODO timeout?
+    //     Serial.println("no data connection yet....");
+    // }
+    else {
+        Serial.println("no data connection yet...");
     }
 }
 
@@ -72,6 +80,7 @@ void FTPCommandProcessor::handleDisconnected() {
     ResponseMessage response("221", "Disconnected from the server");
     session->getCommandSocket()->print(response.encode());
     Serial.println("client disconnected");
+    session->getDataServerSocket()->close();
 }
 
 // returns true if full command was received

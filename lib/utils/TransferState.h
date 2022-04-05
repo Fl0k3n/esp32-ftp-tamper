@@ -35,7 +35,7 @@ public:
 
     bool isDataConnectionClosed() {
         // TODO not sure how FINISHED will be handled
-        return status == NO_TRANSFER;
+        return !dataSocket.connected();
     }
 
     bool isTransferInProgress() {

@@ -76,6 +76,8 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
     transferState->openFile = requestedFile;
 }
 
+void printDirectory(File dir, int numTabs);
+
 void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
     if (!assertValidPathnameArgument(session, msg->data))
         return;
@@ -113,6 +115,9 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
     TransferState* transferState = session->getTransferState();
     transferState->status = WRITE_IN_PROGRESS;
     transferState->openFile = file;
+
+    File dir = SD.open("/");
+    printDirectory(dir, 0);
 }
 
 void FTPServiceHandler::handleStouCmd(CommandMessage* msg, Session* session) {
@@ -126,12 +131,28 @@ void FTPServiceHandler::handleNoopCmd(CommandMessage* msg, Session* session) {
 String FTPServiceHandler::getUniqueFilePath(Session* session, String relativePath) {
     String originalPath = getFilePath(session, relativePath);
 
-    int index = 1;
     String resultPath = originalPath;
-    while (SD.exists(resultPath)) {
-        resultPath = originalPath;
-        resultPath.concat(index++);
+    int extensionPartIndex = originalPath.indexOf('.');
+    if (extensionPartIndex == -1) {
+        int fileIndex = 1;
+        while (SD.exists(resultPath)) {
+            resultPath = originalPath;
+            resultPath.concat(fileIndex++);
+        }
     }
+    else {
+        String extensionPart = originalPath.substring(extensionPartIndex);
+        String pathWithoutExtension = originalPath.substring(0, extensionPartIndex);
+
+        int fileIndex = 1;
+        while (SD.exists(resultPath)) {
+            resultPath = pathWithoutExtension;
+            resultPath.concat(fileIndex++);
+            resultPath.concat(extensionPart);
+        }
+    }
+
+    Serial.println(resultPath);
 
     return resultPath;
 }
@@ -158,4 +179,52 @@ bool FTPServiceHandler::assertValidPathnameArgument(Session* session, String pat
 
 FTPDataProcessor* FTPServiceHandler::getFTPDataProcessor() {
     return dataProcessor;
+}
+
+// for testing only
+void printDirectory(File dir, int numTabs) {
+
+    Serial.println("\nprinting directory...");
+
+    while (true) {
+
+        File entry = dir.openNextFile();
+
+        if (!entry) {
+
+            // no more files
+
+            break;
+
+        }
+
+        for (uint8_t i = 0; i < numTabs; i++) {
+
+            Serial.print('\t');
+
+        }
+
+        Serial.print(entry.name());
+
+        if (entry.isDirectory()) {
+
+            Serial.println("/");
+
+            printDirectory(entry, numTabs + 1);
+
+        }
+        else {
+
+            // files have sizes, directories do not
+
+            Serial.print("\t\t");
+
+            Serial.println(entry.size(), DEC);
+
+        }
+
+        entry.close();
+
+    }
+    Serial.println();
 }

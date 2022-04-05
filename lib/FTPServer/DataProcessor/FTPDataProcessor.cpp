@@ -11,6 +11,9 @@ bool FTPDataProcessor::establishActiveSession(Session* session) {
 }
 
 void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
+    if (!transferState->dataSocket.connected())
+        return;
+
     char rbuf[READ_BUFF_SIZE]; // this may be moved to a private class field
 
     int rd = transferState->openFile.readBytes(rbuf, READ_BUFF_SIZE);
@@ -25,9 +28,15 @@ void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
     else {
         transferState->status = FINISHED;
     }
+    Serial.print(rd);
+    Serial.print("\t");
+    Serial.println(rbuf);
 }
 
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
+    if (!transferState->dataSocket.connected())
+        return true;
+
     char wbuf[WRITE_BUFF_SIZE];
 
     size_t rd = transferState->dataSocket.readBytes(wbuf, WRITE_BUFF_SIZE);
@@ -56,24 +65,6 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
 void FTPDataProcessor::handleDataTransfer(Session* session) {
     TransferState* transferState = session->getTransferState();
 
-    if (!transferState->dataSocket.connected()) {
-        if (transferState->status == READ_IN_PROGRESS) {
-            transferState->cleanupTransfer();
-
-            if (session->mode == PASSIVE) {
-                session->getDataServerSocket()->stop();
-            }
-            // peer closed connection when we still wanted to send data
-            Serial.println("peer closed connection");
-            return;
-        }
-        else if (transferState->status == WRITE_IN_PROGRESS) {
-            // peer finished writing TODO (this is expected state (((probably))))
-            transferState->status = FINISHED;
-        }
-    }
-
-
     if (transferState->status == READ_IN_PROGRESS) {
         sendDataChunk(transferState);
     }
@@ -91,6 +82,23 @@ void FTPDataProcessor::handleDataTransfer(Session* session) {
     }
     else {
         // ???
+    }
+
+    if (!transferState->dataSocket.connected()) {
+        if (transferState->status == READ_IN_PROGRESS) {
+            transferState->cleanupTransfer();
+
+            if (session->mode == PASSIVE) {
+                session->getDataServerSocket()->stop();
+            }
+            // peer closed connection when we still wanted to send data
+            Serial.println("peer closed connection");
+            return;
+        }
+        else if (transferState->status == WRITE_IN_PROGRESS) {
+            // peer finished writing TODO (this is expected state (((probably))))
+            transferState->status = FINISHED;
+        }
     }
 
     if (transferState->status == FINISHED) {

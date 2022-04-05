@@ -43,6 +43,21 @@ void FTPServiceHandler::handleMessage(CommandMessage* msg, Session* session) {
     else if (cmd == "LIST") {
         handleListCmd(msg, session);
     }
+    else if (cmd == "ABOR") {
+        handleAborCmd(msg, session);
+    }
+    else if (cmd == "MKD") {
+        handleMkdCmd(msg, session);
+    }
+    else if (cmd == "SIZE") {
+        handleSizeCmd(msg, session);
+    }
+    else if (cmd == "RMD") {
+        handleRmdCmd(msg, session);
+    }
+    else if (cmd == "DELE") {
+        handleDeleCmd(msg, session);
+    }
     else {
         Serial.println("not implemented");
         sendReply(session, "502", "Not implemented");
@@ -135,37 +150,155 @@ void FTPServiceHandler::handlePwdCmd(CommandMessage* msg, Session* session) {
 
 void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
     if (session->getTransferState()->isDataConnectionClosed()) {
-        sendReply(session, "425", "Can't open data connection.");
+        sendReply(session, "425", "No data connection.");
     }
 
     WiFiClient* dataSocket = session->getTransferState()->getDataSocket();
 
     sendReply(session, "150", "Accepted data connection");
-    uint16_t files = 0;
-    File dir = SD.open(session->getWorkingDirectory());
-    if ((!dir) || (!dir.isDirectory())) {
-        sendReply(session, "550", "Can't open this directory " + session->getWorkingDirectory());
+
+    String path;
+    if (msg->data == "") {
+        path = session->getWorkingDirectory();
     }
     else {
-        File file = dir.openNextFile();
-        while (file) {
-            String fileName, fileSize;
-            fileName = file.name();
-            int sep = fileName.lastIndexOf('/');
-            fileName = fileName.substring(sep + 1);
-            fileSize = String(file.size());
-            if (file.isDirectory()) {
-                dataSocket->println("01-01-2000  00:00AM <DIR> " + fileName);
+        path = getFilePath(session, msg->data);
+    }
+
+    File dir = SD.open(session->getWorkingDirectory(), "r");
+    if ((!dir)) {
+        sendReply(session, "550", "Can't open this file/directory " + path);
+    }
+    else {
+        if (dir.isDirectory()) {
+
+            uint16_t files = 0;
+            File file = dir.openNextFile();
+
+            while (file) {
+                String fileName = getFileName(file);
+                String fileSize = String(file.size());
+
+                if (file.isDirectory()) {
+                    dataSocket->println("<DIR> " + fileName);
+                }
+                else {
+                    dataSocket->println(fileSize + " " + fileName);
+                }
+
+                files++;
+                file = dir.openNextFile();
             }
-            else {
-                dataSocket->println("01-01-2000  00:00AM " + fileSize + " " + fileName);
-            }
-            files++;
-            file = dir.openNextFile();
+            sendReply(session, "226", String(files) + " matches total");
         }
-        sendReply(session, "226", String(files) + " matches total");
+        else {
+            String fileName = getFileName(dir);
+            String fileSize = String(dir.size());
+            dataSocket->println(fileSize + " " + fileName);
+            sendReply(session, "226", "Requested file action successful. Closing data connection");
+        }
     }
     dataSocket->stop();
+}
+
+void FTPServiceHandler::handleAborCmd(CommandMessage* msg, Session* session) {
+    Serial.println("Handling abort...");
+    session->stopListenningForDataConnection();
+    session->getTransferState()->cleanupTransfer();
+
+    if (session->mode == PASSIVE)
+        session->getDataServerSocket()->stop();
+
+    if (session->getTransferState()->isTransferInProgress())
+        sendReply(session, "426", "Transfer aborted");
+
+    sendReply(session, "226", "Aborting OK.");
+}
+
+void FTPServiceHandler::handleMkdCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "") {
+        sendReply(session, "501", "No directory name given");
+        return;
+    }
+
+    String dirPath = getFilePath(session, msg->data);
+
+    if (SD.exists(dirPath)) {
+        sendReply(session, "550", "Directory with this path already exists.");
+        return;
+    }
+
+    if (SD.mkdir(dirPath)) {
+        sendReply(session, "257", "\"" + dirPath + "\" created successfully");
+        Serial.println("Created " + dirPath);
+    }
+    else {
+        sendReply(session, "550", "Unable to create directory \"" + dirPath + "\"");
+        Serial.println("Unable to create " + dirPath);
+    }
+}
+
+void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "") {
+        sendReply(session, "501", "No file name given");
+        return;
+    }
+
+    String filePath = getFilePath(session, msg->data);
+
+    if (!SD.exists(filePath)) {
+        sendReply(session, "550", "File with given name doesn't exist.");
+        return;
+    }
+
+    File file = SD.open(filePath, "r");
+
+    if (file) {
+        sendReply(session, "213", "File size: " + String(file.size()));
+    }
+    else {
+        sendReply(session, "450", "Wasn't able to open " + filePath);
+    }
+}
+
+void FTPServiceHandler::handleDeleCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "") {
+        sendReply(session, "501", "No file/directory path given");
+        return;
+    }
+
+    String filePath = getFilePath(session, msg->data);
+
+    if (!SD.exists(filePath)) {
+        sendReply(session, "550", "File/directory with this path does not exist");
+        return;
+    }
+
+    bool res;
+    if (msg->command == "DELE")
+        res = SD.remove(filePath);
+    else
+        res = SD.rmdir(filePath);
+
+    if (res)
+        sendReply(session, "250", "Deleted successfully.");
+    else {
+        if (msg->command == "DELE")
+            sendReply(session, "450", "Couldn't delete file " + filePath);
+        else
+            sendReply(session, "550", "Couldn't delete directory " + filePath);
+    }
+}
+
+void FTPServiceHandler::handleRmdCmd(CommandMessage* msg, Session* session) {
+    handleDeleCmd(msg, session);
+}
+
+
+String FTPServiceHandler::getFileName(File file) {
+    String fileName = file.name();
+    int sep = fileName.lastIndexOf('/');
+    return fileName.substring(sep + 1);
 }
 
 String FTPServiceHandler::getUniqueFilePath(Session* session, String relativePath) {

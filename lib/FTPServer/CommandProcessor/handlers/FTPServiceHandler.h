@@ -24,9 +24,16 @@ private:
     void handleNoopCmd(CommandMessage*, Session*);
     void handlePwdCmd(CommandMessage*, Session*);
     void handleListCmd(CommandMessage*, Session*);
+    void handleAborCmd(CommandMessage*, Session*);
+    void handleMkdCmd(CommandMessage*, Session*);
+    void handleSizeCmd(CommandMessage*, Session*);
+    void handleDeleCmd(CommandMessage*, Session*);
+    void handleRmdCmd(CommandMessage*, Session*);
+
     String getFilePath(Session*, String);
     String getUniqueFilePath(Session*, String);
     bool assertValidPathnameArgument(Session*, String);
+    String getFileName(File);
 
 public:
     FTPServiceHandler(FTPDataProcessor*);

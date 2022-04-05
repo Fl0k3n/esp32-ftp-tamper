@@ -38,6 +38,12 @@ void TransferParametersHandler::handleMessage(CommandMessage* msg, Session* sess
     else if (cmd == "TYPE") {
         handleTypeCmd(msg, session);
     }
+    else if (cmd == "STRU") {
+        handleStruCmd(msg, session);
+    }
+    else if (cmd == "MODE") {
+        handleModeCmd(msg, session);
+    }
     else {
         Serial.println("not implemented");
         sendReply(session, "502", "Not implemented");
@@ -92,5 +98,30 @@ void TransferParametersHandler::sendPasvResponse(Session* session) {
 }
 
 void TransferParametersHandler::handleTypeCmd(CommandMessage* msg, Session* session) {
-    sendReply(session, "200", "OK"); // hardcoded for now for testing only
+    if (msg->data == "A" || msg->data == "A N")
+        sendReply(session, "200", "ASCII Non-print type");
+    else if (msg->data == "A T" || msg->data == "A C" || msg->data.startsWith("E") || msg->data.startsWith("I") || msg->data.startsWith("L"))
+        sendReply(session, "504", "Only ASCII Non-print type is supported.");
+    else
+        sendReply(session, "501", "Invalid type");
+}
+
+void TransferParametersHandler::handleStruCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "F")
+        sendReply(session, "200", "File");
+    else if (msg->data == "R")
+        sendReply(session, "504", "Record structure not available"); // should be implemented and changed to 200
+    else if (msg->data == "P")
+        sendReply(session, "504", "Page structure not available");
+    else
+        sendReply(session, "501", "Invalid file structure");
+}
+
+void TransferParametersHandler::handleModeCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "S")
+        sendReply(session, "200", "Stream mode");
+    else if (msg->data == "B" || msg->data == "C")
+        sendReply(session, "504", "Only stream transfer mode is available");
+    else
+        sendReply(session, "501", "Invalid transfer mode");
 }

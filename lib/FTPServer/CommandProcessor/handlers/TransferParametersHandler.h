@@ -21,6 +21,8 @@ private:
     void handlePortCmd(CommandMessage*, Session*);
     void handlePasvCmd(CommandMessage*, Session*);
     void handleTypeCmd(CommandMessage*, Session*);
+    void handleStruCmd(CommandMessage*, Session*);
+    void handleModeCmd(CommandMessage*, Session*);
 
 public:
     TransferParametersHandler();

@@ -22,6 +22,8 @@ private:
     void handleStorCmd(CommandMessage*, Session*);
     void handleStouCmd(CommandMessage*, Session*);
     void handleNoopCmd(CommandMessage*, Session*);
+    void handlePwdCmd(CommandMessage*, Session*);
+    void handleListCmd(CommandMessage*, Session*);
     String getFilePath(Session*, String);
     String getUniqueFilePath(Session*, String);
     bool assertValidPathnameArgument(Session*, String);

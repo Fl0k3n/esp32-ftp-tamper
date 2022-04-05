@@ -53,19 +53,39 @@ print(ftp.login("username", "password"))
 # input("press to disconnect")
 
 
-input("press to upload file")
+# input("press to upload file")
 
-filename = 'test1.txt'
-print(ftp.storlines("STOR " + filename, open(filename, 'rb')))
-input("press to proceed")
-print(ftp.cwd("/"))
-input("press to proceed")
-print(ftp.sendcmd("NOOP"))
-input("press to proceed")
-data_sock = ftp.transfercmd('RETR test1.txt1')
+# filename = 'test1.txt'
+# print(ftp.storlines("STOR " + filename, open(filename, 'rb')))
+# input("press to proceed")
+# print(ftp.cwd("/"))
+# input("press to proceed")
+# print(ftp.sendcmd("NOOP"))
+# input("press to proceed")
+# data_sock = ftp.transfercmd('RETR test1.txt1')
 
-file = data_sock.recv(10000)
-print(file)
-data_sock.close()
+# file = data_sock.recv(10000)
+# print(file)
+# data_sock.close()
 
-input("press to close tester")
+# input("press to close tester")
+
+while True:
+    print("file upload")
+
+    filename = 'test1.txt'
+    print(ftp.storlines("STOR " + filename, open(filename, 'rb')))
+    time.sleep(1)
+    print("cwd")
+    print(ftp.cwd("/"))
+    time.sleep(1)
+    print("noop")
+    print(ftp.sendcmd("NOOP"))
+    time.sleep(1)
+    print("file read")
+    data_sock = ftp.transfercmd('RETR test1.txt')
+
+    file = data_sock.recv(10000)
+    print(file)
+    data_sock.close()
+    time.sleep(1)

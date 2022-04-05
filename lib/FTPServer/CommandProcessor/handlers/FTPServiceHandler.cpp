@@ -2,7 +2,7 @@
 
 
 // no, we wont implement all
-const String FTPServiceHandler::canHandleCmds[] = { "RETR", "STOR", "STOU", "APPE", "ALLO", "REST", "RNFR", "RNTO", "ABOR", "DELE", "RMD", "MKD", "PWD", "LIST", "NLST", "SITE", "SYST", "STAT", "HELP", "NOOP" };
+const String FTPServiceHandler::canHandleCmds[] = { "RETR", "STOR", "STOU", "APPE", "ALLO", "REST", "RNFR", "RNTO", "ABOR", "DELE", "RMD", "MKD", "PWD", "LIST", "NLST", "SITE", "SYST", "STAT", "HELP", "NOOP", "SIZE" };
 const int FTPServiceHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 
@@ -36,6 +36,12 @@ void FTPServiceHandler::handleMessage(CommandMessage* msg, Session* session) {
     }
     else if (cmd == "NOOP") {
         handleNoopCmd(msg, session);
+    }
+    else if (cmd == "PWD") {
+        handlePwdCmd(msg, session);
+    }
+    else if (cmd == "LIST") {
+        handleListCmd(msg, session);
     }
     else {
         Serial.println("not implemented");
@@ -123,15 +129,70 @@ void FTPServiceHandler::handleNoopCmd(CommandMessage* msg, Session* session) {
     sendReply(session, "200", "OK");
 }
 
+void FTPServiceHandler::handlePwdCmd(CommandMessage* msg, Session* session) {
+    sendReply(session, "257", "\"" + session->getWorkingDirectory() + "\" is current working directory");
+}
+
+void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
+    if (session->getTransferState()->isDataConnectionClosed()) {
+        sendReply(session, "425", "Can't open data connection.");
+    }
+
+    WiFiClient* dataSocket = session->getTransferState()->getDataSocket();
+
+    sendReply(session, "150", "Accepted data connection");
+    uint16_t files = 0;
+    File dir = SD.open(session->getWorkingDirectory());
+    if ((!dir) || (!dir.isDirectory())) {
+        sendReply(session, "550", "Can't open this directory " + session->getWorkingDirectory());
+    }
+    else {
+        File file = dir.openNextFile();
+        while (file) {
+            String fileName, fileSize;
+            fileName = file.name();
+            int sep = fileName.lastIndexOf('/');
+            fileName = fileName.substring(sep + 1);
+            fileSize = String(file.size());
+            if (file.isDirectory()) {
+                dataSocket->println("01-01-2000  00:00AM <DIR> " + fileName);
+            }
+            else {
+                dataSocket->println("01-01-2000  00:00AM " + fileSize + " " + fileName);
+            }
+            files++;
+            file = dir.openNextFile();
+        }
+        sendReply(session, "226", String(files) + " matches total");
+    }
+    dataSocket->stop();
+}
+
 String FTPServiceHandler::getUniqueFilePath(Session* session, String relativePath) {
     String originalPath = getFilePath(session, relativePath);
 
-    int index = 1;
     String resultPath = originalPath;
-    while (SD.exists(resultPath)) {
-        resultPath = originalPath;
-        resultPath.concat(index++);
+    int extensionPartIndex = originalPath.indexOf('.');
+    if (extensionPartIndex == -1) {
+        int fileIndex = 1;
+        while (SD.exists(resultPath)) {
+            resultPath = originalPath;
+            resultPath.concat(fileIndex++);
+        }
     }
+    else {
+        String extensionPart = originalPath.substring(extensionPartIndex);
+        String pathWithoutExtension = originalPath.substring(0, extensionPartIndex);
+
+        int fileIndex = 1;
+        while (SD.exists(resultPath)) {
+            resultPath = pathWithoutExtension;
+            resultPath.concat(fileIndex++);
+            resultPath.concat(extensionPart);
+        }
+    }
+
+    Serial.println(resultPath);
 
     return resultPath;
 }

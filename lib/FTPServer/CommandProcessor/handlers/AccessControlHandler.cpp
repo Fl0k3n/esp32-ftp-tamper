@@ -1,6 +1,6 @@
 #include "AccessControlHandler.h"
 
-const String AccessControlHandler::canHandleCmds[] = { "USER", "PASS", "AUTH", "CWD", "CDUP", "REIN", "QUIT" };
+const String AccessControlHandler::canHandleCmds[] = { "USER", "PASS", "AUTH", "CWD", "CDUP", "REIN", "QUIT", "FEAT" };
 const int AccessControlHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 AccessControlHandler::AccessControlHandler(String username, String password)
@@ -52,6 +52,9 @@ void AccessControlHandler::handleMessage(CommandMessage* msg, Session* session) 
     }
     else if (command == "REIN") {
         handleReinitCmd(msg, session);
+    }
+    else if (command == "FEAT") {
+        handleFeatCmd(msg, session);
     }
 }
 
@@ -144,6 +147,10 @@ void AccessControlHandler::handleCwdCmd(CommandMessage* msg, Session* session) {
 void AccessControlHandler::handleCdupCmd(CommandMessage* msg, Session* session) {
     CommandMessage cmdMessage("CDUP", "..");
     handleCwdCmd(&cmdMessage, session);
+}
+
+void AccessControlHandler::handleFeatCmd(CommandMessage* msg, Session* session) {
+    sendReply(session, "202", "Command not implemented, superfluous at this site.");
 }
 
 String AccessControlHandler::changeDirectory(String currentWorkingDirectory, String path) {

@@ -23,6 +23,7 @@ private:
     void handleReinitCmd(CommandMessage*, Session*);
     void handleCwdCmd(CommandMessage*, Session*);
     void handleCdupCmd(CommandMessage*, Session*);
+    void handleFeatCmd(CommandMessage*, Session*);
 
 public:
     bool canHandle(CommandMessage*);

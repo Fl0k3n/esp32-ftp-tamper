@@ -40,7 +40,7 @@ void FTPCommandProcessor::listenForCommands() {
         }
 
         // not sure if this should be here
-        if (session->getTransferState()->isTransferInProgress()) {
+        if (session->getTransferState()->isTransferInProgress() && !session->shouldListenForDataConnections()) {
             dataProcessor->handleDataTransfer(session);
         }
 
@@ -58,10 +58,8 @@ void FTPCommandProcessor::checkDataConnections() {
 
         TransferState* transferState = session->getTransferState();
         transferState->dataSocket = dataClientSocket;
-
-        session->getCommandSocket()->print(ResponseMessage("225", "Data connection open; no transfer in progress.").encode());
     }
-    else if (!session->getTransferState()->isTransferInProgress()) {
+    else {
         // TODO timeout?
         Serial.println("no data connection yet....");
     }
@@ -72,6 +70,7 @@ void FTPCommandProcessor::handleDisconnected() {
     ResponseMessage response("221", "Disconnected from the server");
     session->getCommandSocket()->print(response.encode());
     Serial.println("client disconnected");
+    session->getDataServerSocket()->close();
 }
 
 // returns true if full command was received

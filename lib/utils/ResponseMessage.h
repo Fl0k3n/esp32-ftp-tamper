@@ -13,6 +13,8 @@ public:
 
     String encode() {
         // or smth like this
+        if (responseCode == "")
+            return responseData + "\r\n";
         return responseCode + " " + responseData + "\r\n";
     }
 };

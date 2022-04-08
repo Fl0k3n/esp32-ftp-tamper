@@ -1,13 +1,26 @@
 #include "FTPDataProcessor.h"
 
-bool FTPDataProcessor::establishActiveSession(Session* session) {
+bool FTPDataProcessor::establishDataConnection(Session* session) {
+    TransferState* transferState = session->getTransferState();
+
+    if (session->mode == PASSIVE) {
+        WiFiServer* dataServerSocket = session->getDataServerSocket();
+        if (dataServerSocket->hasClient()) {
+            WiFiClient dataClientSocket = dataServerSocket->available();
+            session->stopListenningForDataConnection();
+
+            transferState->dataSocket = dataClientSocket;
+            return true;
+        }
+
+        return false;
+    }
+
     // 5.2.  CONNECTIONS
     // The server shall initiate the data connection from his own default data port (L-1) = 20
     // not sure if WiFiClient lets us choose local port
-
-    TransferState* transferState = session->getTransferState();
-
-    return transferState->dataSocket.connect(transferState->clientDataIP.c_str(), transferState->clientDataPort);
+    return transferState->dataSocket
+        .connect(transferState->clientDataIP.c_str(), transferState->clientDataPort);
 }
 
 void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
@@ -30,10 +43,10 @@ void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
     char wbuf[WRITE_BUFF_SIZE];
 
-    size_t rd = transferState->dataSocket.readBytes(wbuf, WRITE_BUFF_SIZE);
+    int rd = transferState->dataSocket.readBytes(wbuf, WRITE_BUFF_SIZE);
     if (rd > 0) {
-        size_t position = transferState->openFile.position();
-        size_t written = transferState->openFile.write((uint8_t*)wbuf, rd);
+        int position = transferState->openFile.position();
+        int written = transferState->openFile.write((uint8_t*)wbuf, rd);
 
         // not sure about this one, maybe immediately return 451 instead?
         int tries = 1;
@@ -88,9 +101,6 @@ void FTPDataProcessor::handleDataTransfer(Session* session) {
                 session->getDataServerSocket()->stop();
             }
         }
-    }
-    else {
-        // ???
     }
 
     if (transferState->status == FINISHED) {

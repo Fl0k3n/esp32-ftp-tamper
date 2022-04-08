@@ -82,19 +82,11 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
 
     sendReply(session, "150", "File status okay; about to open data connection.");
 
-
-    if (session->mode == ACTIVE) {
-        bool sessionEstb = dataProcessor->establishActiveSession(session);
-        if (!sessionEstb) {
-            Serial.println("Failed to establish session");
-            sendReply(session, "425", "Can't open data connection.");
-            return;
-        }
+    if (assertDataConnectionOpen(session)) {
+        TransferState* transferState = session->getTransferState();
+        transferState->status = READ_IN_PROGRESS;
+        transferState->openFile = requestedFile;
     }
-
-    TransferState* transferState = session->getTransferState();
-    transferState->status = READ_IN_PROGRESS;
-    transferState->openFile = requestedFile;
 }
 
 void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
@@ -122,18 +114,11 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
 
     sendReply(session, "150", "File status okay; about to open data connection.");
 
-    if (session->mode == ACTIVE) {
-        bool sessionEstb = dataProcessor->establishActiveSession(session);
-        if (!sessionEstb) {
-            Serial.println("Failed to establish session");
-            sendReply(session, "425", "Can't open data connection.");
-            return;
-        }
+    if (assertDataConnectionOpen(session)) {
+        TransferState* transferState = session->getTransferState();
+        transferState->status = WRITE_IN_PROGRESS;
+        transferState->openFile = file;
     }
-
-    TransferState* transferState = session->getTransferState();
-    transferState->status = WRITE_IN_PROGRESS;
-    transferState->openFile = file;
 }
 
 void FTPServiceHandler::handleStouCmd(CommandMessage* msg, Session* session) {
@@ -149,9 +134,8 @@ void FTPServiceHandler::handlePwdCmd(CommandMessage* msg, Session* session) {
 }
 
 void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
-    if (session->getTransferState()->isDataConnectionClosed()) {
-        sendReply(session, "425", "No data connection.");
-    }
+    if (!assertDataConnectionOpen(session))
+        return;
 
     WiFiClient* dataSocket = session->getTransferState()->getDataSocket();
 
@@ -171,7 +155,7 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
     }
     else {
         if (dir.isDirectory()) {
-
+            Serial.println("listing directory");
             uint16_t files = 0;
             File file = dir.openNextFile();
 
@@ -180,10 +164,10 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
                 String fileSize = String(file.size());
 
                 if (file.isDirectory()) {
-                    dataSocket->println("<DIR> " + fileName);
+                    dataSocket->println("01-01-1970  00:00AM <DIR> " + fileName);
                 }
                 else {
-                    dataSocket->println(fileSize + " " + fileName);
+                    dataSocket->println("01-01-1970  00:00AM " + fileSize + " " + fileName);
                 }
 
                 files++;
@@ -192,13 +176,18 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
             sendReply(session, "226", String(files) + " matches total");
         }
         else {
+            Serial.println("listing file");
             String fileName = getFileName(dir);
             String fileSize = String(dir.size());
-            dataSocket->println(fileSize + " " + fileName);
+            dataSocket->println("01-01-1970  00:00AM " + fileSize + " " + fileName);
             sendReply(session, "226", "Requested file action successful. Closing data connection");
         }
     }
+
     dataSocket->stop();
+    if (session->mode == PASSIVE) {
+        session->getDataServerSocket()->stop();
+    }
 }
 
 void FTPServiceHandler::handleAborCmd(CommandMessage* msg, Session* session) {
@@ -352,4 +341,45 @@ bool FTPServiceHandler::assertValidPathnameArgument(Session* session, String pat
 
 FTPDataProcessor* FTPServiceHandler::getFTPDataProcessor() {
     return dataProcessor;
+}
+
+
+
+bool FTPServiceHandler::assertDataConnectionOpen(Session* session) {
+    Serial.print("Awaiting data connection");
+    bool connectionEstablished = false;
+
+    // TODO what if its already open?
+    if (session->getTransferState()->getDataSocket()->connected()) {
+        Serial.println("CRITICAL: opening another data connection");
+        return true;
+    }
+
+    for (int i = 0; i < DATA_CONNECTION_TIMEOUT_MILLIS / 10; i++) {
+        if (dataProcessor->establishDataConnection(session)) {
+            connectionEstablished = true;
+            break;
+        }
+
+        Serial.print(".");
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+
+    Serial.println();
+
+    if (connectionEstablished) {
+        Serial.print("Data connection established in ");
+    }
+    else {
+        Serial.print("Failed to establish connection in ");
+    }
+
+    Serial.printf("%s mode\n", session->mode == ACTIVE ? "active" : "passive");
+
+    if (!connectionEstablished) {
+        sendReply(session, "425", "No data connection.");
+        session->getCommandSocket()->stop(); // TODO
+    }
+
+    return connectionEstablished;
 }

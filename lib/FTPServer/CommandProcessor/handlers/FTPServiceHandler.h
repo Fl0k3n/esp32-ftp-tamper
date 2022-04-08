@@ -9,12 +9,14 @@
 #include "Session.h"
 #include "DataProcessor/FTPDataProcessor.h"
 
+#define DATA_CONNECTION_TIMEOUT_MILLIS 150
+
 
 
 class FTPServiceHandler : public FTPCommandHandler {
 private:
     static const String canHandleCmds[];
-    static const int canHandleCmdsNumber; // can we bypass this somehow? :( // yes ;-))
+    static const int canHandleCmdsNumber;
 
     FTPDataProcessor* dataProcessor;
 
@@ -35,6 +37,7 @@ private:
     bool assertValidPathnameArgument(Session*, String);
     String getFileName(File);
 
+    bool assertDataConnectionOpen(Session*);
 public:
     FTPServiceHandler(FTPDataProcessor*);
     bool canHandle(CommandMessage*);

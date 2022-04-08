@@ -4,15 +4,6 @@ const String TransferParametersHandler::canHandleCmds[] = { "PORT", "PASV", "TYP
 const int TransferParametersHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 TransferParametersHandler::TransferParametersHandler() {
-    // TODO, server has to choose the port, hardcoded for now
-    dataPort = 50009; // must be unprivilieged >1024
-    IPAddress ip = WiFi.localIP();
-
-    ipStringForPasv = ip.toString();
-    ipStringForPasv.replace(".", ",");
-
-    // h1,h2,h3,h4,p1,p2
-    sprintf(pasvResponse, "%s,%hhu,%hhu", ipStringForPasv.c_str(), dataPort / 256, dataPort % 256);
 }
 
 bool TransferParametersHandler::canHandle(CommandMessage* msg) {
@@ -80,19 +71,27 @@ void TransferParametersHandler::handlePortCmd(CommandMessage* msg, Session* sess
 
 
 void TransferParametersHandler::handlePasvCmd(CommandMessage* msg, Session* session) {
+    char pasvResponse[24];
+    IPAddress ip = WiFi.localIP();
+    String ipStringForPasv = ip.toString();
+    ipStringForPasv.replace(".", ",");
+
+    // TODO assert that this port is free
+    uint16_t dataPort = random(49152, 65536);
+
+    // h1,h2,h3,h4,p1,p2
+    sprintf(pasvResponse, "%s,%hhu,%hhu", ipStringForPasv.c_str(), dataPort / 256, dataPort % 256);
+
     if (session->getTransferState()->isTransferInProgress()) {
         // TODO review this section, I guess it shouldnt handle it like that if there is a pasv from a client while transfer in progress
-        Serial.println("already in passive");
-        sendPasvResponse(session);
+        // happens iff client tries to establish multpile parallel data connections, 502 not implemented is probably the best thing we can do here
+        Serial.println("CRITCAL: already in passive");
+        sendReply(session, "502", "Not implemented. Use at most single data connection.");
         return;
     }
 
     session->mode = PASSIVE;
     session->startListenningForDataConnection(dataPort);
-    sendPasvResponse(session);
-}
-
-void TransferParametersHandler::sendPasvResponse(Session* session) {
     sendReply(session, "227", String(pasvResponse));
     Serial.printf("sent pasv response: ->%s<-\n", pasvResponse);
 }
@@ -100,6 +99,11 @@ void TransferParametersHandler::sendPasvResponse(Session* session) {
 void TransferParametersHandler::handleTypeCmd(CommandMessage* msg, Session* session) {
     if (msg->data == "A" || msg->data == "A N")
         sendReply(session, "200", "ASCII Non-print type");
+    else if (msg->data == "I") {
+        // TODO not finished this
+        // we already send it in Image type + filezilla uses that by default
+        sendReply(session, "200", "Image type");
+    }
     else if (msg->data == "A T" || msg->data == "A C" || msg->data.startsWith("E") || msg->data.startsWith("I") || msg->data.startsWith("L"))
         sendReply(session, "504", "Only ASCII Non-print type is supported.");
     else

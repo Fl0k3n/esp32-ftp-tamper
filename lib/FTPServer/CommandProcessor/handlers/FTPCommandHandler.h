@@ -19,7 +19,10 @@ protected:
         ResponseMessage response(replyStatus, replyText);
 
         session->getCommandSocket()->print(response.encode());
-        Serial.println("sent response");
+        Serial.print("sent response code: ");
+        Serial.print(replyStatus);
+        Serial.print(" data: ");
+        Serial.println(replyText);
     }
 };
 

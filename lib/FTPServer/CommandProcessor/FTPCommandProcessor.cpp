@@ -15,7 +15,7 @@ void FTPCommandProcessor::listenForCommands() {
     session->setSessionStatus(AWAIT_USERNAME);
 
     while (true) {
-        if (!commandSocket->connected() || session->canBeLoggedOut()) {
+        if (!session->getCommandSocket()->connected() || session->canBeLoggedOut()) {
             handleDisconnected();
             return;
         }
@@ -35,9 +35,6 @@ void FTPCommandProcessor::listenForCommands() {
                 handleMessage();
         }
 
-        if (session->shouldListenForDataConnections()) {
-            checkDataConnections();
-        }
 
         // not sure if this should be here
         if (session->getTransferState()->isTransferInProgress() && !session->shouldListenForDataConnections()) {
@@ -48,25 +45,12 @@ void FTPCommandProcessor::listenForCommands() {
     }
 }
 
-void FTPCommandProcessor::checkDataConnections() {
-    WiFiServer* dataServerSocket = session->getDataServerSocket();
-
-    if (dataServerSocket->hasClient()) {
-        Serial.println("Got data socket");
-        WiFiClient dataClientSocket = dataServerSocket->available();
-        session->stopListenningForDataConnection();
-
-        TransferState* transferState = session->getTransferState();
-        transferState->dataSocket = dataClientSocket;
-    }
-    else {
-        // TODO timeout?
-        Serial.println("no data connection yet....");
-    }
-}
-
 
 void FTPCommandProcessor::handleDisconnected() {
+    if (!session->getCommandSocket()->connected()) {
+        Serial.println("disconnected because command connection was closed");
+    }
+
     ResponseMessage response("221", "Disconnected from the server");
     session->getCommandSocket()->print(response.encode());
     Serial.println("client disconnected");
@@ -105,12 +89,10 @@ bool FTPCommandProcessor::processSocketInput() {
 }
 
 void FTPCommandProcessor::handleMessage() {
-    Serial.println("IN HANDLE MESSAGE: ");
     String rawMessage = session->getMessageBuff();
     session->clearMessageBuff();
 
     CommandMessage msg = CommandMessage::decode(rawMessage);
-    msg.print();
 
     if (accessControlHandler->canHandle(&msg)) {
         accessControlHandler->handleMessage(&msg, session);
@@ -124,5 +106,7 @@ void FTPCommandProcessor::handleMessage() {
     else {
         Serial.println("got unexpected message");
         msg.print();
+        // TODO or syntax error ?
+        session->getCommandSocket()->print(ResponseMessage("502", "Not implemented").encode());
     }
 }

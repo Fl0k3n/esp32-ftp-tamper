@@ -21,9 +21,6 @@ private:
 
     bool processSocketInput();
     void handleMessage();
-
-    void checkDataConnections();
-
 public:
     FTPCommandProcessor(Session*, AccessControlHandler*, FTPServiceHandler*, TransferParametersHandler*);
     void listenForCommands();

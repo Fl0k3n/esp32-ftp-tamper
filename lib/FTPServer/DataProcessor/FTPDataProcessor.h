@@ -15,9 +15,9 @@ private:
     void sendDataChunk(TransferState*);
     bool receiveDataChunk(TransferState*);
 public:
-    // returns true if connection was successully established
-    bool establishActiveSession(Session*); // connect in ACTIVE mode
 
+    // returns true if connection was successully established
+    bool establishDataConnection(Session*);
     // shouldn't transfer entire file in one call, but in chunks so we can handle commands in the meantime (such as ABORT)
     void handleDataTransfer(Session*);
 };

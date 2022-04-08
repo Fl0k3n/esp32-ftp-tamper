@@ -56,6 +56,10 @@ void AccessControlHandler::handleMessage(CommandMessage* msg, Session* session) 
     else if (command == "FEAT") {
         handleFeatCmd(msg, session);
     }
+    else {
+        Serial.println("not implemented");
+        sendReply(session, "502", "Not implemented");
+    }
 }
 
 void AccessControlHandler::handleAuthCmd(CommandMessage* msg, Session* session) {

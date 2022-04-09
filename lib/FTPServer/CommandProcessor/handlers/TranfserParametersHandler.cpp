@@ -100,7 +100,7 @@ void TransferParametersHandler::handleTypeCmd(CommandMessage* msg, Session* sess
     if (msg->data == "A" || msg->data == "A N")
         sendReply(session, "200", "ASCII Non-print type");
     else if (msg->data == "I") {
-        // TODO not finished this
+        // TODO check this
         // we already send it in Image type + filezilla uses that by default
         sendReply(session, "200", "Image type");
     }

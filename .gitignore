@@ -6,3 +6,4 @@
 .vscode/ipch
 config.h
 src/utils/*.txt
+*.log

@@ -23,7 +23,7 @@ bool FTPDataProcessor::establishDataConnection(Session* session) {
         .connect(transferState->clientDataIP.c_str(), transferState->clientDataPort);
 }
 
-void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
+bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
     char rbuf[READ_BUFF_SIZE]; // this may be moved to a private class field
 
     int rd = transferState->openFile.readBytes(rbuf, READ_BUFF_SIZE);
@@ -32,12 +32,14 @@ void FTPDataProcessor::sendDataChunk(TransferState* transferState) {
 
         if (written != -1 && written < rd) {
             Serial.printf("not entire buff was written, wrote: %d, read: %d\n", written, rd);
-            // TODO
+            return false;
         }
     }
     else {
         transferState->status = FINISHED;
     }
+
+    return true;
 }
 
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
@@ -65,51 +67,51 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
     return true;
 }
 
+void FTPDataProcessor::handleFailedTransfer(Session* session) {
+    session->getCommandSocket()->print(
+        ResponseMessage("451", "Requested action aborted: error in processing received data; Closing data connection").encode());
+    session->cleanupTransfer();
+}
+
 
 void FTPDataProcessor::handleDataTransfer(Session* session) {
     TransferState* transferState = session->getTransferState();
 
     if (!transferState->dataSocket.connected()) {
         if (transferState->status == READ_IN_PROGRESS) {
-            transferState->cleanupTransfer();
-
-            if (session->mode == PASSIVE) {
-                session->getDataServerSocket()->stop();
-            }
             // peer closed connection when we still wanted to send data
-            Serial.println("peer closed connection");
+            session->cleanupTransfer();
+            Serial.println("WARN: peer closed connection");
             return;
         }
         else if (transferState->status == WRITE_IN_PROGRESS) {
-            // peer finished writing TODO (this is expected state (((probably))))
             transferState->status = FINISHED;
         }
     }
 
 
     if (transferState->status == READ_IN_PROGRESS) {
-        sendDataChunk(transferState);
+        bool success = sendDataChunk(transferState);
+        if (!success) {
+            Serial.println("ERROR: Failed to send data chunk");
+            handleFailedTransfer(session);
+        }
+
     }
     else if (transferState->status == WRITE_IN_PROGRESS) {
         bool success = receiveDataChunk(transferState);
 
         if (!success) {
-            session->getCommandSocket()->print(ResponseMessage("451", "Requested action aborted: error in processing received data; Closing data connection").encode());
-            transferState->cleanupTransfer();
-
-            if (session->mode == PASSIVE) {
-                session->getDataServerSocket()->stop();
-            }
+            Serial.println("ERROR: Failed to receive data chunk");
+            handleFailedTransfer(session);
         }
     }
 
     if (transferState->status == FINISHED) {
         Serial.println("operation on file finished successfully");
         session->getCommandSocket()->print(ResponseMessage("226", "Closing data connection, file transfer successful").encode());
-        transferState->cleanupTransfer();
-
-        if (session->mode == PASSIVE) {
-            session->getDataServerSocket()->stop();
-        }
+        Serial.print("Is still connected? ");
+        Serial.println(session->getCommandSocket()->connected());
+        session->cleanupTransfer();
     }
 }

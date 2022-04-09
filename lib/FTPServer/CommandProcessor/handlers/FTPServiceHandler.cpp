@@ -193,13 +193,11 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
 void FTPServiceHandler::handleAborCmd(CommandMessage* msg, Session* session) {
     Serial.println("Handling abort...");
     session->stopListenningForDataConnection();
-    session->getTransferState()->cleanupTransfer();
-
-    if (session->mode == PASSIVE)
-        session->getDataServerSocket()->stop();
 
     if (session->getTransferState()->isTransferInProgress())
         sendReply(session, "426", "Transfer aborted");
+
+    session->cleanupTransfer();
 
     sendReply(session, "226", "Aborting OK.");
 }
@@ -356,6 +354,11 @@ bool FTPServiceHandler::assertDataConnectionOpen(Session* session) {
     }
 
     for (int i = 0; i < DATA_CONNECTION_TIMEOUT_MILLIS / 10; i++) {
+        if (!session->getCommandSocket()->connected()) {
+            Serial.println("client disconnected while waiting for data connection");
+            return false;
+        }
+
         if (dataProcessor->establishDataConnection(session)) {
             connectionEstablished = true;
             break;
@@ -378,7 +381,8 @@ bool FTPServiceHandler::assertDataConnectionOpen(Session* session) {
 
     if (!connectionEstablished) {
         sendReply(session, "425", "No data connection.");
-        session->getCommandSocket()->stop(); // TODO
+        // probably not needed
+        session->getTransferState()->getDataSocket()->stop();
     }
 
     return connectionEstablished;

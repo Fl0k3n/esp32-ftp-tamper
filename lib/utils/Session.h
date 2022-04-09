@@ -37,7 +37,6 @@ public:
     SessionMode mode;
 
     Session(WiFiClient* commandSock);
-    ~Session();
 
     SessionStatus getSessionStatus();
     void setSessionStatus(SessionStatus);
@@ -62,6 +61,8 @@ public:
     void stopListenningForDataConnection();
 
     WiFiServer* getDataServerSocket();
+
+    void cleanupTransfer();
 };
 
 #endif

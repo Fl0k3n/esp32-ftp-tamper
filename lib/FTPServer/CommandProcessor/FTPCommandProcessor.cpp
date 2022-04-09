@@ -50,11 +50,14 @@ void FTPCommandProcessor::handleDisconnected() {
     if (!session->getCommandSocket()->connected()) {
         Serial.println("disconnected because command connection was closed");
     }
+    else {
+        ResponseMessage response("221", "Disconnected from the server");
+        session->getCommandSocket()->print(response.encode());
+        Serial.println("client disconnected");
+        session->getCommandSocket()->stop();
+    }
 
-    ResponseMessage response("221", "Disconnected from the server");
-    session->getCommandSocket()->print(response.encode());
-    Serial.println("client disconnected");
-    session->getDataServerSocket()->close();
+    session->cleanupTransfer();
 }
 
 // returns true if full command was received

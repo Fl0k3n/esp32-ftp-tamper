@@ -15,11 +15,6 @@ void Session::init() {
     isListenningForData = false;
 }
 
-Session::~Session() {
-    if (commandSocket->connected())
-        commandSocket->stop();
-}
-
 SessionStatus Session::getSessionStatus() {
     return sessionStatus;
 }
@@ -79,4 +74,13 @@ void Session::stopListenningForDataConnection() {
 
 WiFiServer* Session::getDataServerSocket() {
     return &dataServerSocket;
+}
+
+
+void Session::cleanupTransfer() {
+    transferState.cleanupTransfer();
+
+    if (mode == PASSIVE) {
+        dataServerSocket.stop();
+    }
 }

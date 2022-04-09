@@ -12,8 +12,10 @@
 class FTPDataProcessor {
 private:
     // assumes that session is ready to send data and file is open for reading/writing
-    void sendDataChunk(TransferState*);
+    bool sendDataChunk(TransferState*);
     bool receiveDataChunk(TransferState*);
+
+    void handleFailedTransfer(Session*);
 public:
 
     // returns true if connection was successully established

@@ -9,7 +9,7 @@
 #include "Session.h"
 #include "DataProcessor/FTPDataProcessor.h"
 
-#define DATA_CONNECTION_TIMEOUT_MILLIS 150
+#define DATA_CONNECTION_TIMEOUT_MILLIS 500
 
 
 

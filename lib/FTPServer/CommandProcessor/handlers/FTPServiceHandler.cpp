@@ -58,6 +58,12 @@ void FTPServiceHandler::handleMessage(CommandMessage* msg, Session* session) {
     else if (cmd == "DELE") {
         handleDeleCmd(msg, session);
     }
+    else if (cmd == "RNFR") {
+        handleRnfrCmd(msg, session);
+    }
+    else if (cmd == "RNTO") {
+        handleRntoCmd(msg, session);
+    }
     else {
         Serial.println("not implemented");
         sendReply(session, "502", "Not implemented");
@@ -281,6 +287,51 @@ void FTPServiceHandler::handleRmdCmd(CommandMessage* msg, Session* session) {
     handleDeleCmd(msg, session);
 }
 
+void FTPServiceHandler::handleRnfrCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "") {
+        sendReply(session, "501", "No filename given");
+        return;
+    }
+
+    String fileToRename = getFilePath(session, msg->data);
+
+    if (!SD.exists(fileToRename)) {
+        sendReply(session, "550", "File with such name was not found");
+        return;
+    }
+
+    session->setFileToRename(fileToRename);
+
+    sendReply(session, "350", "RNFR accepted. Waiting for RNTO command.");
+}
+
+void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
+    if (msg->data == "") {
+        sendReply(session, "501", "No filename given");
+        return;
+    }
+
+    if (session->getFileToRename() == "") {
+        sendReply(session, "503", "Send filename of the file to rename first");
+        return;
+    }
+
+    String newFileName = getFilePath(session, msg->data);
+
+    if (SD.exists(newFileName)) {
+        sendReply(session, "553", "File with given filename already exists");
+        return;
+    }
+
+    if (SD.rename(session->getFileToRename(), newFileName)) {
+        Serial.println("Renaming " + session->getFileToRename() + " to " + newFileName + " finished successfully");
+        sendReply(session, "250", "File renamed successfully");
+    } else {
+        Serial.println("Renaming " + session->getFileToRename() + " to " + newFileName + " failed");
+        sendReply(session, "451", "Renaming file failed");
+    }
+    session->clearFileToRename();
+}
 
 String FTPServiceHandler::getFileName(File file) {
     String fileName = file.name();

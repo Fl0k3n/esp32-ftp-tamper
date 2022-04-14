@@ -13,6 +13,7 @@ void Session::init() {
     clearMessageBuff();
     workingDirectory = "/";
     isListenningForData = false;
+    fileToRename = "";
 }
 
 SessionStatus Session::getSessionStatus() {
@@ -36,8 +37,20 @@ String Session::getMessageBuff() {
     return messageBuff;
 }
 
+String Session::getFileToRename() {
+    return fileToRename;
+}
+
 void Session::clearMessageBuff() {
     messageBuff = "";
+}
+
+void Session::clearFileToRename() {
+    fileToRename = "";
+}
+
+void Session::setFileToRename(String file) {
+    fileToRename = file;
 }
 
 bool Session::canBeLoggedOut() {

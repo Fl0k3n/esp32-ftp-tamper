@@ -30,6 +30,8 @@ private:
     String workingDirectory;
     String messageBuff;
 
+    String fileToRename;
+
     bool isListenningForData;
     uint16_t dataPort;
 
@@ -45,8 +47,11 @@ public:
 
     // TODO replace this with char* buff, with predefined max length to avoid dynamic memory allocation
     String getMessageBuff();
+    String getFileToRename();
     void setMessageBuff(String buff);
     void clearMessageBuff();
+    void clearFileToRename();
+    void setFileToRename(String);
 
     String getWorkingDirectory();
     void setWorkingDirectory(String);

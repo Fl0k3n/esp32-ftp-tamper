@@ -31,6 +31,8 @@ private:
     void handleSizeCmd(CommandMessage*, Session*);
     void handleDeleCmd(CommandMessage*, Session*);
     void handleRmdCmd(CommandMessage*, Session*);
+    void handleRnfrCmd(CommandMessage*, Session*);
+    void handleRntoCmd(CommandMessage*, Session*);
 
     String getFilePath(Session*, String);
     String getUniqueFilePath(Session*, String);

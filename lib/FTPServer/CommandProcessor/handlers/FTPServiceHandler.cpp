@@ -2,7 +2,7 @@
 
 
 // no, we wont implement all
-const String FTPServiceHandler::canHandleCmds[] = { "RETR", "STOR", "STOU", "APPE", "ALLO", "REST", "RNFR", "RNTO", "ABOR", "DELE", "RMD", "MKD", "PWD", "LIST", "NLST", "SITE", "SYST", "STAT", "HELP", "NOOP", "SIZE" };
+const String FTPServiceHandler::canHandleCmds[] = { "RETR", "STOR", "STOU", "APPE", "ALLO", "REST", "RNFR", "RNTO", "MDTM", "ABOR", "DELE", "RMD", "MKD", "PWD", "LIST", "NLST", "SITE", "SYST", "STAT", "HELP", "NOOP", "SIZE" };
 const int FTPServiceHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 
@@ -64,6 +64,9 @@ void FTPServiceHandler::handleMessage(CommandMessage* msg, Session* session) {
     else if (cmd == "RNTO") {
         handleRntoCmd(msg, session);
     }
+    else if (cmd == "APPE") {
+        handleAppeCmd(msg, session);
+    }
     else {
         Serial.println("not implemented");
         sendReply(session, "502", "Not implemented");
@@ -79,7 +82,7 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
     Serial.print("Trying to open file in 'r' mode: ");
     Serial.println(path);
 
-    File requestedFile = SD.open(path, "r");
+    File requestedFile = SD.open(path, FILE_READ);
     if (!requestedFile) {
         Serial.println("Failed to open file");
         sendReply(session, "550", "File not found.");
@@ -92,6 +95,7 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
         TransferState* transferState = session->getTransferState();
         transferState->status = READ_IN_PROGRESS;
         transferState->openFile = requestedFile;
+        dataProcessor->prepareCipher();
     }
 }
 
@@ -111,7 +115,12 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
     Serial.print("Trying to open file in 'w' mode: ");
     Serial.println(path);
 
-    File file = SD.open(path, "w");
+    File file;
+    if (msg->command == "APPE") {
+        file = SD.open(path, FILE_APPEND);
+    } else {
+        file = SD.open(path, FILE_WRITE);
+    }
     if (!file) {
         Serial.println("Failed to open file");
         sendReply(session, "553", "Failed to create file with a given path");
@@ -124,6 +133,9 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
         TransferState* transferState = session->getTransferState();
         transferState->status = WRITE_IN_PROGRESS;
         transferState->openFile = file;
+        if (msg->command != "APPE") {
+            dataProcessor->prepareCipher();
+        }
     }
 }
 
@@ -155,7 +167,7 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
         path = getFilePath(session, msg->data);
     }
 
-    File dir = SD.open(session->getWorkingDirectory(), "r");
+    File dir = SD.open(session->getWorkingDirectory(), FILE_READ);
     if ((!dir)) {
         sendReply(session, "550", "Can't open this file/directory " + path);
     }
@@ -232,10 +244,9 @@ void FTPServiceHandler::handleMkdCmd(CommandMessage* msg, Session* session) {
 }
 
 void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
-    if (msg->data == "") {
-        sendReply(session, "501", "No file name given");
+    if (!assertValidPathnameArgument(session, msg->data))
         return;
-    }
+
 
     String filePath = getFilePath(session, msg->data);
 
@@ -244,7 +255,7 @@ void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
         return;
     }
 
-    File file = SD.open(filePath, "r");
+    File file = SD.open(filePath, FILE_READ);
 
     if (file) {
         sendReply(session, "213", "File size: " + String(file.size()));
@@ -255,10 +266,9 @@ void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
 }
 
 void FTPServiceHandler::handleDeleCmd(CommandMessage* msg, Session* session) {
-    if (msg->data == "") {
-        sendReply(session, "501", "No file/directory path given");
+    if (!assertValidPathnameArgument(session, msg->data))
         return;
-    }
+
 
     String filePath = getFilePath(session, msg->data);
 
@@ -288,10 +298,9 @@ void FTPServiceHandler::handleRmdCmd(CommandMessage* msg, Session* session) {
 }
 
 void FTPServiceHandler::handleRnfrCmd(CommandMessage* msg, Session* session) {
-    if (msg->data == "") {
-        sendReply(session, "501", "No filename given");
+    if (!assertValidPathnameArgument(session, msg->data))
         return;
-    }
+
 
     String fileToRename = getFilePath(session, msg->data);
 
@@ -306,10 +315,9 @@ void FTPServiceHandler::handleRnfrCmd(CommandMessage* msg, Session* session) {
 }
 
 void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
-    if (msg->data == "") {
-        sendReply(session, "501", "No filename given");
+    if (!assertValidPathnameArgument(session, msg->data))
         return;
-    }
+
 
     if (session->getFileToRename() == "") {
         sendReply(session, "503", "Send filename of the file to rename first");
@@ -331,6 +339,10 @@ void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
         sendReply(session, "451", "Renaming file failed");
     }
     session->clearFileToRename();
+}
+
+void FTPServiceHandler::handleAppeCmd(CommandMessage* msg, Session* session) {
+    handleStorCmd(msg, session);
 }
 
 String FTPServiceHandler::getFileName(File file) {

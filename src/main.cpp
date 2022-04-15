@@ -1,10 +1,11 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <SD.h>
-
+#include <ChaCha.h>
 #include <FTPServer.h>
 
 #include "config.h"
+#include "cipher_key.h"
 
 #define BAUD 9600
 #define WIFI_INIT_TIMEOUT 15
@@ -14,13 +15,25 @@ TaskHandle_t FTPServerTask;
 void ftpServerTask(void*) {
     Serial.println("starting server...");
 
-    FTPDataProcessor dataProcessor;
-    AccessControlHandler accessControlHandler(ftp_username, ftp_password);
-    FTPServiceHandler ftpServiceHandler(&dataProcessor);
-    TransferParametersHandler transferParametersHandler;
+    char* plaintext = "Hello world!";
 
-    FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
-    ftpServer.run();
+
+    ChaCha chacha = ChaCha(20);
+    if (chacha.setKey(cipherKey, cipherKeyLen)) {
+        if (chacha.setIV(iv, ivLen)) {
+            FTPDataProcessor dataProcessor(chacha, cipherKey, iv, cipherKeyLen, ivLen);
+            AccessControlHandler accessControlHandler(ftp_username, ftp_password);
+            FTPServiceHandler ftpServiceHandler(&dataProcessor);
+            TransferParametersHandler transferParametersHandler;
+
+            FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
+            ftpServer.run();
+        }
+        Serial.println("IV length is not supported. FTPServer launching aborted");
+        vTaskDelete(NULL);
+    }
+    Serial.println("Key length is not supported or the key is weak and unusable by this cipher. FTPServer launching aborted");
+    vTaskDelete(NULL);
 }
 
 void initSD() {

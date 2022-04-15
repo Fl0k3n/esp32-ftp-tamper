@@ -1,5 +1,18 @@
 #include "FTPDataProcessor.h"
 
+FTPDataProcessor::FTPDataProcessor(ChaCha chacha, const uint8_t* cipherKey, const uint8_t* iv, const int cipherKeyLen, const int ivLen) {
+    this->chacha = chacha;
+    this->cipherKey = cipherKey;
+    this->iv = iv;
+    this->cipherKeyLen = cipherKeyLen;
+    this->ivLen = ivLen;
+}
+
+bool FTPDataProcessor::prepareCipher() {
+    chacha.clear();
+    return chacha.setKey(cipherKey, cipherKeyLen) && chacha.setIV(iv, ivLen);
+}
+
 bool FTPDataProcessor::establishDataConnection(Session* session) {
     TransferState* transferState = session->getTransferState();
 
@@ -24,11 +37,13 @@ bool FTPDataProcessor::establishDataConnection(Session* session) {
 }
 
 bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
-    char rbuf[READ_BUFF_SIZE]; // this may be moved to a private class field
+    uint8_t rbuf[READ_BUFF_SIZE]; // this may be moved to a private class field
 
-    int rd = transferState->openFile.readBytes(rbuf, READ_BUFF_SIZE);
+    size_t rd = transferState->openFile.read(rbuf, READ_BUFF_SIZE);
+
     if (rd > 0) {
         int written = transferState->dataSocket.write(rbuf, rd);
+        // chacha.decrypt(rbuf, rbuf, rd);
 
         if (written != -1 && written < rd) {
             Serial.printf("not entire buff was written, wrote: %d, read: %d\n", written, rd);
@@ -43,18 +58,19 @@ bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
 }
 
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
-    char wbuf[WRITE_BUFF_SIZE];
+    uint8_t wbuf[WRITE_BUFF_SIZE];
 
-    int rd = transferState->dataSocket.readBytes(wbuf, WRITE_BUFF_SIZE);
+    size_t rd = transferState->dataSocket.read(wbuf, WRITE_BUFF_SIZE);
+
     if (rd > 0) {
+        // chacha.encrypt(wbuf, wbuf, rd);
         int position = transferState->openFile.position();
-        int written = transferState->openFile.write((uint8_t*)wbuf, rd);
+        int written = transferState->openFile.write(wbuf, rd);
 
-        // not sure about this one, maybe immediately return 451 instead?
         int tries = 1;
         while (written < rd && tries <= 3) {
             transferState->openFile.seek(position);
-            written = transferState->openFile.write((uint8_t*)wbuf, rd);
+            written = transferState->openFile.write(wbuf, rd);
             tries++;
         }
 
@@ -62,7 +78,7 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
             return false;
         }
 
-        Serial.println(wbuf);
+        // Serial.println(wbuf);
     }
     return true;
 }
@@ -108,6 +124,7 @@ void FTPDataProcessor::handleDataTransfer(Session* session) {
     }
 
     if (transferState->status == FINISHED) {
+        Serial.println();
         Serial.println("operation on file finished successfully");
         session->getCommandSocket()->print(ResponseMessage("226", "Closing data connection, file transfer successful").encode());
         Serial.print("Is still connected? ");

@@ -33,6 +33,7 @@ private:
     void handleRmdCmd(CommandMessage*, Session*);
     void handleRnfrCmd(CommandMessage*, Session*);
     void handleRntoCmd(CommandMessage*, Session*);
+    void handleAppeCmd(CommandMessage*, Session*);
 
     String getFilePath(Session*, String);
     String getUniqueFilePath(Session*, String);

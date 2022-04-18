@@ -6,5 +6,6 @@
 .vscode/ipch
 config.h
 cipher_key.h
+email_account.h
 src/utils/*.txt
 *.log

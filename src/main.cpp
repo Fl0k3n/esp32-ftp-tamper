@@ -3,14 +3,18 @@
 #include <SD.h>
 #include <ChaCha.h>
 #include <FTPServer.h>
+#include <EMailSender.h>
 
 #include "config.h"
 #include "cipher_key.h"
+#include "email_account.h"
 
 #define BAUD 9600
 #define WIFI_INIT_TIMEOUT 15
 
 TaskHandle_t FTPServerTask;
+
+EMailSender emailSender(email, email_password);
 
 void ftpServerTask(void*) {
     Serial.println("starting server...");
@@ -89,6 +93,17 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
 }
 
+void sendWarningMails(String message) {
+    EMailSender::EMailMessage msg;
+    msg.subject = "TAMPER WARNING - ESP32 FTP SERVER";
+    msg.message = message;
+    
+    EMailSender::Response response = emailSender.send(emails_to_notify, sizeof(emails_to_notify) / sizeof(emails_to_notify[0]), msg);
+    Serial.println("Sending warning mails status: ");
+    Serial.println("code: " + response.code);
+    Serial.println("desc: " + response.desc);
+}
+
 void setup() {
     Serial.begin(BAUD);
     while (!Serial) {
@@ -97,6 +112,8 @@ void setup() {
 
     initSD();
     connectToWiFi();
+
+    // sendWarningMails("Warning here"); // tested - everything is correct
 
     // serial didnt work with pinned to core 1, no idea why
     xTaskCreate(

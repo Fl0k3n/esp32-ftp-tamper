@@ -22,7 +22,7 @@ void FTPServer::run() {
 
     while (true) {
         acceptConnection(&params);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(100);
     }
 }
 
@@ -33,13 +33,15 @@ void FTPServer::acceptConnection(CommandProcessorParams* params) {
 
         TaskHandle_t commandProcessorHandle;
 
-        xTaskCreate(
-            handleConnection,
-            "FTPCommandProcessor",
-            8192,
-            params,
-            1,
-            &commandProcessorHandle);
+        xTaskCreatePinnedToCore(
+            handleConnection, /* Task function. */
+            "FTPCommandProcessor",     /* name of task. */
+            8192,    /* Stack size of task */
+            params,      /* parameter of the task */
+            1,         /* priority of the task */
+            &commandProcessorHandle,  /* Task handle to keep track of created task */
+            1          /* Core where the task should run */
+        );
     }
     else {
         // Serial.println("No connection...");

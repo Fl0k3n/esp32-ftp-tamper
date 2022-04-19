@@ -4,23 +4,30 @@
 #include <ChaCha.h>
 #include <FTPServer.h>
 #include <EMailSender.h>
+#include <KeypadModule.h>
 
 #include "config.h"
 #include "cipher_key.h"
-#include "email_account.h"
 
 #define BAUD 9600
 #define WIFI_INIT_TIMEOUT 15
 
+enum SecureMode {
+    SECURE = 0,
+    UNSECURE = 1
+};
+
+SecureMode secureMode;
+
 TaskHandle_t FTPServerTask;
+TaskHandle_t KeypadModuleTask;
+
+KeypadModule* keypadModule;
 
 EMailSender emailSender(email, email_password);
 
 void ftpServerTask(void*) {
     Serial.println("starting server...");
-
-    char* plaintext = "Hello world!";
-
 
     ChaCha chacha = ChaCha(20);
     if (chacha.setKey(cipherKey, cipherKeyLen)) {
@@ -40,12 +47,30 @@ void ftpServerTask(void*) {
     vTaskDelete(NULL);
 }
 
+void keypadModuleTask(void*) {
+    Serial.println("To switch device mode between secure and unsecure, enter pin anytime.");
+    while (keypadModule->enterPin()) {
+        if (secureMode == SECURE) {
+            Serial.println("Changed device mode to unsecure");
+            // change led 
+            secureMode = UNSECURE;
+        } else {
+            Serial.println("Changed device mode to secure");
+            // change led
+            secureMode = SECURE;
+        }
+    }
+    Serial.println("Entered wrong pin too many times. Restarting the device...");
+    ESP.restart(); // just for now, dont know how to really handle this
+    vTaskDelete(NULL);
+}
+
 void initSD() {
     if (SD.begin())
         Serial.println("SD card successfully initialized");
     else {
-        Serial.println("Error: SD card initialization failed");
-        while (true) {} // maybe we can reset the board instead of this
+        Serial.println("Error: SD card initialization failed. Try to fix the error and restart the device");
+        while (true) {}
     }
 
     Serial.println("creating test file at /test.txt");
@@ -70,11 +95,22 @@ void initSD() {
     f.close();
 }
 
+void initKeypadModule() {
+    keypadModule = new KeypadModule(pin, 8);
+    Serial.println("Enter pin: ");
+    if (!keypadModule->enterPin()) {
+        Serial.println("ENTERED WRONG PIN TOO MANY TIMES. ABORTING LAUCHING THE DEVICE");
+        while (true) {}
+    }
+    Serial.println("Entering secure mode");
+    secureMode = SECURE;
+}
+
 void checkWiFiConnectionTimeout(int* tries) {
     (*tries)++;
     if (*tries == WIFI_INIT_TIMEOUT) {
-        Serial.println("\nError: Unable to connect to WiFi with given ssid and password");
-        while (true) {} // maybe we can reset the board instead of this
+        Serial.println("\nError: Unable to connect to WiFi with given ssid and password. Try to fix the error and restart the device");
+        while (true) {}
     }
 }
 
@@ -111,21 +147,32 @@ void setup() {
     }
 
     initSD();
+    initKeypadModule();
     connectToWiFi();
 
     // sendWarningMails("Warning here"); // tested - everything is correct
 
-    // serial didnt work with pinned to core 1, no idea why
-    xTaskCreate(
-        ftpServerTask,          //Function to implement the task 
-        "FTPServer",            //Name of the task
-        8192,                   //Stack size in words 
-        NULL,                   //Task input parameter 
-        5,                      //Priority of the task 
-        &FTPServerTask         //Task handle.
-    );                     //Core where the task should run 
+    xTaskCreatePinnedToCore(
+      ftpServerTask, /* Task function. */
+      "FTPServer",     /* name of task. */
+      8192,    /* Stack size of task */
+      NULL,      /* parameter of the task */
+      1,         /* priority of the task */
+      &FTPServerTask,  /* Task handle to keep track of created task */
+      1          /* Core where the task should run */
+    );
+
+    xTaskCreatePinnedToCore(
+      keypadModuleTask,
+      "KeypadModuleTask",
+      8192,
+      NULL,
+      1,
+      &KeypadModuleTask,
+      0
+    );
 }
 
 void loop() {
-    // put your main code here, to run repeatedly:
+    vTaskDelay(1);
 }

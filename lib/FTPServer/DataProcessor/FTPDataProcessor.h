@@ -8,8 +8,7 @@
 #include <Crypto.h>
 #include <ChaCha.h>
 
-#define READ_BUFF_SIZE 4096
-#define WRITE_BUFF_SIZE 4096
+#define BUF_SIZE 4096
 
 class FTPDataProcessor {
 private:
@@ -20,6 +19,8 @@ private:
 
     const uint8_t* iv;
     int ivLen;
+
+    char buf[BUF_SIZE];
     
     // assumes that session is ready to send data and file is open for reading/writing
     bool sendDataChunk(TransferState*);

@@ -36,7 +36,7 @@ void FTPServer::acceptConnection(CommandProcessorParams* params) {
         xTaskCreatePinnedToCore(
             handleConnection, /* Task function. */
             "FTPCommandProcessor",     /* name of task. */
-            8192,    /* Stack size of task */
+            16384,    /* Stack size of task */
             params,      /* parameter of the task */
             1,         /* priority of the task */
             &commandProcessorHandle,  /* Task handle to keep track of created task */

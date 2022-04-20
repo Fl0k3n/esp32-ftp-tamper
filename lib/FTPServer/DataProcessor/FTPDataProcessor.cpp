@@ -37,12 +37,10 @@ bool FTPDataProcessor::establishDataConnection(Session* session) {
 }
 
 bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
-    uint8_t rbuf[READ_BUFF_SIZE]; // this may be moved to a private class field
-
-    size_t rd = transferState->openFile.read(rbuf, READ_BUFF_SIZE);
+    size_t rd = transferState->openFile.readBytes(buf, BUF_SIZE);
 
     if (rd > 0) {
-        int written = transferState->dataSocket.write(rbuf, rd);
+        size_t written = transferState->dataSocket.write(buf, rd);
         // chacha.decrypt(rbuf, rbuf, rd);
 
         if (written != -1 && written < rd) {
@@ -58,23 +56,23 @@ bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
 }
 
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
-    uint8_t wbuf[WRITE_BUFF_SIZE];
-
-    size_t rd = transferState->dataSocket.read(wbuf, WRITE_BUFF_SIZE);
+    size_t rd = transferState->dataSocket.readBytes((uint8_t *)buf, BUF_SIZE);
 
     if (rd > 0) {
         // chacha.encrypt(wbuf, wbuf, rd);
-        int position = transferState->openFile.position();
-        int written = transferState->openFile.write(wbuf, rd);
+        size_t position = transferState->openFile.position();
+        size_t written = transferState->openFile.write((uint8_t *)buf, rd);
 
         int tries = 1;
-        while (written < rd && tries <= 3) {
+        while (written == 0 && tries <= 5) {
+            transferState->openFile.close();
+            transferState->openFile = SD.open(transferState->openFilePath, "w");
             transferState->openFile.seek(position);
-            written = transferState->openFile.write(wbuf, rd);
+            written = transferState->openFile.write((uint8_t *)buf, rd);
             tries++;
         }
 
-        if (written < rd) {
+        if (written == 0) {
             return false;
         }
 

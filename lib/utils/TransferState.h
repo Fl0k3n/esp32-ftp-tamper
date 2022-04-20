@@ -20,6 +20,7 @@ public:
     WiFiClient dataSocket;
 
     File openFile; // valid only if isTransferInProgress()
+    String openFilePath;
 
     // address used to estb connection in ACTIVE mode
     String clientDataIP;
@@ -50,6 +51,7 @@ public:
         status = NO_TRANSFER;
         dataSocket.stop();
         openFile.close();
+        openFilePath = "";
     }
 
     WiFiClient* getDataSocket() {

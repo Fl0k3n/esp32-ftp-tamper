@@ -95,6 +95,7 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
         TransferState* transferState = session->getTransferState();
         transferState->status = READ_IN_PROGRESS;
         transferState->openFile = requestedFile;
+        transferState->openFilePath = path;
         dataProcessor->prepareCipher();
     }
 }
@@ -133,6 +134,7 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
         TransferState* transferState = session->getTransferState();
         transferState->status = WRITE_IN_PROGRESS;
         transferState->openFile = file;
+        transferState->openFilePath = path;
         if (msg->command != "APPE") {
             dataProcessor->prepareCipher();
         }

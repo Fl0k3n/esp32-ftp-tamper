@@ -40,8 +40,8 @@ bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
     size_t rd = transferState->openFile.readBytes(buf, BUF_SIZE);
 
     if (rd > 0) {
+        chacha.decrypt((uint8_t *)buf, (uint8_t *)buf, rd);
         size_t written = transferState->dataSocket.write(buf, rd);
-        // chacha.decrypt(rbuf, rbuf, rd);
 
         if (written != -1 && written < rd) {
             Serial.printf("not entire buff was written, wrote: %d, read: %d\n", written, rd);
@@ -59,7 +59,7 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
     size_t rd = transferState->dataSocket.readBytes((uint8_t *)buf, BUF_SIZE);
 
     if (rd > 0) {
-        // chacha.encrypt(wbuf, wbuf, rd);
+        chacha.encrypt((uint8_t *)buf, (uint8_t *)buf, rd);
         size_t position = transferState->openFile.position();
         size_t written = transferState->openFile.write((uint8_t *)buf, rd);
 

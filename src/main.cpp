@@ -5,12 +5,14 @@
 #include <FTPServer.h>
 #include <EMailSender.h>
 #include <KeypadModule.h>
+#include <LightSensor.h>
 
 #include "config.h"
 #include "cipher_key.h"
 
 #define BAUD 9600
 #define WIFI_INIT_TIMEOUT 15
+#define LED_PIN 15
 
 enum SecureMode {
     SECURE = 0,
@@ -21,6 +23,7 @@ SecureMode secureMode;
 
 TaskHandle_t FTPServerTask;
 TaskHandle_t KeypadModuleTask;
+TaskHandle_t LightSensorTask;
 
 KeypadModule* keypadModule;
 
@@ -52,16 +55,22 @@ void keypadModuleTask(void*) {
     while (keypadModule->enterPin()) {
         if (secureMode == SECURE) {
             Serial.println("Changed device mode to unsecure");
-            // change led 
+            digitalWrite(LED_PIN, LOW);
             secureMode = UNSECURE;
         } else {
             Serial.println("Changed device mode to secure");
-            // change led
+            digitalWrite(LED_PIN, HIGH);
             secureMode = SECURE;
         }
     }
     Serial.println("Entered wrong pin too many times. Restarting the device...");
     ESP.restart(); // just for now, dont know how to really handle this
+    vTaskDelete(NULL);
+}
+
+void lightSensorTask(void*) {
+    LightSensor lightSensor = LightSensor();
+    lightSensor.run();
     vTaskDelete(NULL);
 }
 
@@ -104,6 +113,7 @@ void initKeypadModule() {
     }
     Serial.println("Entering secure mode");
     secureMode = SECURE;
+    digitalWrite(LED_PIN, HIGH);
 }
 
 void checkWiFiConnectionTimeout(int* tries) {
@@ -146,6 +156,9 @@ void setup() {
 
     }
 
+    pinMode(LED_PIN, OUTPUT);
+    digitalWrite(LED_PIN, LOW);
+
     initSD();
     initKeypadModule();
     connectToWiFi();
@@ -169,6 +182,16 @@ void setup() {
       NULL,
       1,
       &KeypadModuleTask,
+      0
+    );
+
+    xTaskCreatePinnedToCore(
+      lightSensorTask,
+      "LightSensorTask",
+      8192,
+      NULL,
+      1,
+      &LightSensorTask,
       0
     );
 }

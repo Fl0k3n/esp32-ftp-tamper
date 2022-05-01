@@ -7,35 +7,31 @@
 #include "ResponseMessage.h"
 #include <Crypto.h>
 #include <ChaCha.h>
-
-#define BUF_SIZE 4096
+#include "ftpconf.h"
 
 class FTPDataProcessor {
 private:
-    ChaCha chacha;
-
     const uint8_t* cipherKey;
-    int cipherKeyLen;
 
-    const uint8_t* iv;
-    int ivLen;
-
-    char buf[BUF_SIZE];
-    
     // assumes that session is ready to send data and file is open for reading/writing
     bool sendDataChunk(TransferState*);
     bool receiveDataChunk(TransferState*);
 
     void handleFailedTransfer(Session*);
+
+    void generateIV(uint8_t ivBuff[IV_LEN]);
+
 public:
-    FTPDataProcessor(ChaCha, const uint8_t*, const uint8_t*, const int, const int);
+    FTPDataProcessor(const uint8_t*);
 
     // returns true if connection was successully established
     bool establishDataConnection(Session*);
     // shouldn't transfer entire file in one call, but in chunks so we can handle commands in the meantime (such as ABORT)
     void handleDataTransfer(Session*);
 
-    bool prepareCipher();
+    bool prepareCipher(Session*, String, File*);
+
+    bool assertValidCipherConfig();
 };
 
 

@@ -51,9 +51,10 @@ void FTPServer::acceptConnection(CommandProcessorParams* params) {
 
 void FTPServer::handleConnection(void* rtosArgs) {
     CommandProcessorParams* params = (CommandProcessorParams*)rtosArgs;
+    ChaCha chacha = ChaCha(CHACHA_ROUNDS);
 
     WiFiClient client = params->serverSocket->available();
-    Session session(&client);
+    Session session(&client, &chacha);
 
 
     FTPCommandProcessor commandProcessor(&session, params->accessControlHandler,

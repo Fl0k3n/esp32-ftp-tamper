@@ -96,7 +96,7 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
         transferState->status = READ_IN_PROGRESS;
         transferState->openFile = requestedFile;
         transferState->openFilePath = path;
-        dataProcessor->prepareCipher();
+        dataProcessor->prepareCipher(session, FILE_READ, &requestedFile);
     }
 }
 
@@ -116,12 +116,7 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
     Serial.print("Trying to open file in 'w' mode: ");
     Serial.println(path);
 
-    File file;
-    if (msg->command == "APPE") {
-        file = SD.open(path, FILE_APPEND);
-    } else {
-        file = SD.open(path, FILE_WRITE);
-    }
+    File file = SD.open(path, msg->command == "APPE" ? FILE_APPEND : FILE_WRITE);
     if (!file) {
         Serial.println("Failed to open file");
         sendReply(session, "553", "Failed to create file with a given path");
@@ -135,8 +130,8 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
         transferState->status = WRITE_IN_PROGRESS;
         transferState->openFile = file;
         transferState->openFilePath = path;
-        if (msg->command != "APPE") {
-            dataProcessor->prepareCipher();
+        if (msg->command != "APPE") { // TODO proper APPE handling, this wont work in most cases
+            dataProcessor->prepareCipher(session, FILE_WRITE, &file);
         }
     }
 }
@@ -181,7 +176,7 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
 
             while (file) {
                 String fileName = getFileName(file);
-                String fileSize = String(file.size());
+                String fileSize = String(file.size() - IV_LEN);
 
                 if (file.isDirectory()) {
                     dataSocket->println("01-01-1970  00:00AM <DIR> " + fileName);
@@ -336,7 +331,8 @@ void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
     if (SD.rename(session->getFileToRename(), newFileName)) {
         Serial.println("Renaming " + session->getFileToRename() + " to " + newFileName + " finished successfully");
         sendReply(session, "250", "File renamed successfully");
-    } else {
+    }
+    else {
         Serial.println("Renaming " + session->getFileToRename() + " to " + newFileName + " failed");
         sendReply(session, "451", "Renaming file failed");
     }

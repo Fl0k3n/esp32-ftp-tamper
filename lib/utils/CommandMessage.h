@@ -1,11 +1,8 @@
 #ifndef COMMAND_MESSAGE
 #define COMMAND_MESSAGE
 
-#define MIN_COMMAND_LENGTH 3
-#define DELIM_LENGTH 2 // length of \r\n
-
 #include <Arduino.h>
-
+#include "ftpconf.h"
 
 class CommandMessage {
 public:

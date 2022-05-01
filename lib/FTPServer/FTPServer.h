@@ -1,12 +1,11 @@
 #ifndef FTP_SERVER
 #define FTP_SERVER
 
-#define CONTROL_SERVER_PORT 21
-
 #include <WiFi.h>
 
 #include "CommandProcessor/FTPCommandProcessor.h"
 #include "CommandProcessor/handlers/AccessControlHandler.h"
+#include "ftpconf.h"
 
 typedef struct CommandProcessorParams {
     WiFiServer* serverSocket;

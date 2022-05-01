@@ -1,8 +1,8 @@
 #include "Session.h"
 
-Session::Session(WiFiClient* commandSock) :
+Session::Session(WiFiClient* commandSock, ChaCha* cipher) :
     commandSocket(commandSock),
-    transferState(commandSock->remoteIP().toString())
+    transferState(commandSock->remoteIP().toString(), cipher)
 {
     init();
 }

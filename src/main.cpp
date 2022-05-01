@@ -14,6 +14,7 @@
 #define WIFI_INIT_TIMEOUT 15
 #define LED_PIN 15
 
+
 enum SecureMode {
     SECURE = 0,
     UNSECURE = 1
@@ -30,24 +31,20 @@ KeypadModule* keypadModule;
 EMailSender emailSender(email, email_password);
 
 void ftpServerTask(void*) {
-    Serial.println("starting server...");
+    Serial.println("Starting FTPServer...");
+    FTPDataProcessor dataProcessor(cipherKey);
 
-    ChaCha chacha = ChaCha(20);
-    if (chacha.setKey(cipherKey, cipherKeyLen)) {
-        if (chacha.setIV(iv, ivLen)) {
-            FTPDataProcessor dataProcessor(chacha, cipherKey, iv, cipherKeyLen, ivLen);
-            AccessControlHandler accessControlHandler(ftp_username, ftp_password);
-            FTPServiceHandler ftpServiceHandler(&dataProcessor);
-            TransferParametersHandler transferParametersHandler;
-
-            FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
-            ftpServer.run();
-        }
-        Serial.println("IV length is not supported. FTPServer launching aborted");
+    if (!dataProcessor.assertValidCipherConfig()) {
+        Serial.println("Invalid cipher confing. FTPServer launching aborted.");
         vTaskDelete(NULL);
     }
-    Serial.println("Key length is not supported or the key is weak and unusable by this cipher. FTPServer launching aborted");
-    vTaskDelete(NULL);
+
+    AccessControlHandler accessControlHandler(ftp_username, ftp_password);
+    FTPServiceHandler ftpServiceHandler(&dataProcessor);
+    TransferParametersHandler transferParametersHandler;
+
+    FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);
+    ftpServer.run();
 }
 
 void keypadModuleTask(void*) {
@@ -57,7 +54,8 @@ void keypadModuleTask(void*) {
             Serial.println("Changed device mode to unsecure");
             digitalWrite(LED_PIN, LOW);
             secureMode = UNSECURE;
-        } else {
+        }
+        else {
             Serial.println("Changed device mode to secure");
             digitalWrite(LED_PIN, HIGH);
             secureMode = SECURE;
@@ -143,7 +141,7 @@ void sendWarningMails(String message) {
     EMailSender::EMailMessage msg;
     msg.subject = "TAMPER WARNING - ESP32 FTP SERVER";
     msg.message = message;
-    
+
     EMailSender::Response response = emailSender.send(emails_to_notify, sizeof(emails_to_notify) / sizeof(emails_to_notify[0]), msg);
     Serial.println("Sending warning mails status: ");
     Serial.println("code: " + response.code);
@@ -160,40 +158,40 @@ void setup() {
     digitalWrite(LED_PIN, LOW);
 
     initSD();
-    initKeypadModule();
+    // initKeypadModule();
     connectToWiFi();
 
     // sendWarningMails("Warning here"); // tested - everything is correct
 
     xTaskCreatePinnedToCore(
-      ftpServerTask, /* Task function. */
-      "FTPServer",     /* name of task. */
-      8192,    /* Stack size of task */
-      NULL,      /* parameter of the task */
-      1,         /* priority of the task */
-      &FTPServerTask,  /* Task handle to keep track of created task */
-      1          /* Core where the task should run */
+        ftpServerTask, /* Task function. */
+        "FTPServer",     /* name of task. */
+        8192,    /* Stack size of task */
+        NULL,      /* parameter of the task */
+        1,         /* priority of the task */
+        &FTPServerTask,  /* Task handle to keep track of created task */
+        1          /* Core where the task should run */
     );
 
-    xTaskCreatePinnedToCore(
-      keypadModuleTask,
-      "KeypadModuleTask",
-      8192,
-      NULL,
-      1,
-      &KeypadModuleTask,
-      0
-    );
+    // xTaskCreatePinnedToCore(
+    //   keypadModuleTask,
+    //   "KeypadModuleTask",
+    //   8192,
+    //   NULL,
+    //   1,
+    //   &KeypadModuleTask,
+    //   0
+    // );
 
-    xTaskCreatePinnedToCore(
-      lightSensorTask,
-      "LightSensorTask",
-      8192,
-      NULL,
-      1,
-      &LightSensorTask,
-      0
-    );
+    // xTaskCreatePinnedToCore(
+    //   lightSensorTask,
+    //   "LightSensorTask",
+    //   8192,
+    //   NULL,
+    //   1,
+    //   &LightSensorTask,
+    //   0
+    // );
 }
 
 void loop() {

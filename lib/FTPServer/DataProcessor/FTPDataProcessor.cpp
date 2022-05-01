@@ -1,16 +1,56 @@
 #include "FTPDataProcessor.h"
 
-FTPDataProcessor::FTPDataProcessor(ChaCha chacha, const uint8_t* cipherKey, const uint8_t* iv, const int cipherKeyLen, const int ivLen) {
-    this->chacha = chacha;
+FTPDataProcessor::FTPDataProcessor(const uint8_t* cipherKey) {
     this->cipherKey = cipherKey;
-    this->iv = iv;
-    this->cipherKeyLen = cipherKeyLen;
-    this->ivLen = ivLen;
 }
 
-bool FTPDataProcessor::prepareCipher() {
-    chacha.clear();
-    return chacha.setKey(cipherKey, cipherKeyLen) && chacha.setIV(iv, ivLen);
+bool FTPDataProcessor::assertValidCipherConfig() {
+    ChaCha chacha = ChaCha(CHACHA_ROUNDS);
+
+    if (!chacha.setKey(cipherKey, KEY_LEN)) {
+        Serial.println("Key length is not supported or the key is weak and unusable by this cipher.");
+        return false;
+    }
+
+    uint8_t ivPlaceholder[IV_LEN];
+
+    if (!chacha.setIV(ivPlaceholder, IV_LEN)) {
+        Serial.println("IV length is not supported.");
+        return false;
+    }
+
+    return true;
+}
+
+// takes file as argument to assert that its already open
+bool FTPDataProcessor::prepareCipher(Session* session, String fileMode, File* openFile) {
+    TransferState* transferState = session->getTransferState();
+    ChaCha* chacha = transferState->cipher;
+
+    chacha->clear();
+
+    if (fileMode == FILE_WRITE) {
+        generateIV(transferState->iv);
+        if (openFile->write(transferState->iv, IV_LEN) < IV_LEN) {
+            Serial.print("CRITICAL: Failed to write IV to ");
+            Serial.println(openFile->name());
+            return false;
+        }
+    }
+    else if (fileMode == FILE_READ) {
+        if (openFile->read(transferState->iv, IV_LEN) < IV_LEN) {
+            Serial.print("CRITICAL: Failed to read IV from ");
+            Serial.println(openFile->name());
+            return false;
+        }
+    }
+    else {
+        Serial.print("CRITICAL: Requested cipher init for file mode: ");
+        Serial.println(fileMode);
+        return false;
+    }
+
+    return chacha->setKey(cipherKey, KEY_LEN) && chacha->setIV(transferState->iv, IV_LEN);
 }
 
 bool FTPDataProcessor::establishDataConnection(Session* session) {
@@ -37,11 +77,12 @@ bool FTPDataProcessor::establishDataConnection(Session* session) {
 }
 
 bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
-    size_t rd = transferState->openFile.readBytes(buf, BUF_SIZE);
+    int rd = transferState->openFile.readBytes(transferState->buf, FTP_BUF_SIZE);
+    uint8_t* buf = (uint8_t*)transferState->buf;
 
     if (rd > 0) {
-        chacha.decrypt((uint8_t *)buf, (uint8_t *)buf, rd);
-        size_t written = transferState->dataSocket.write(buf, rd);
+        transferState->cipher->decrypt(buf, buf, rd);
+        int written = transferState->dataSocket.write(buf, rd);
 
         if (written != -1 && written < rd) {
             Serial.printf("not entire buff was written, wrote: %d, read: %d\n", written, rd);
@@ -56,27 +97,27 @@ bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
 }
 
 bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
-    size_t rd = transferState->dataSocket.readBytes((uint8_t *)buf, BUF_SIZE);
+    uint8_t* buf = (uint8_t*)transferState->buf;
+    int rd = transferState->dataSocket.readBytes(buf, FTP_BUF_SIZE);
 
     if (rd > 0) {
-        chacha.encrypt((uint8_t *)buf, (uint8_t *)buf, rd);
-        size_t position = transferState->openFile.position();
-        size_t written = transferState->openFile.write((uint8_t *)buf, rd);
+        transferState->cipher->encrypt(buf, buf, rd);
+        int position = transferState->openFile.position();
+        int written = transferState->openFile.write(buf, rd);
 
         int tries = 1;
         while (written == 0 && tries <= 5) {
             transferState->openFile.close();
-            transferState->openFile = SD.open(transferState->openFilePath, "w");
+            // TODO check file mode
+            transferState->openFile = SD.open(transferState->openFilePath, FILE_APPEND);
             transferState->openFile.seek(position);
-            written = transferState->openFile.write((uint8_t *)buf, rd);
+            written = transferState->openFile.write(buf, rd);
             tries++;
         }
 
         if (written == 0) {
             return false;
         }
-
-        // Serial.println(wbuf);
     }
     return true;
 }
@@ -128,5 +169,12 @@ void FTPDataProcessor::handleDataTransfer(Session* session) {
         Serial.print("Is still connected? ");
         Serial.println(session->getCommandSocket()->connected());
         session->cleanupTransfer();
+    }
+}
+
+void FTPDataProcessor::generateIV(uint8_t iv[IV_LEN]) {
+    // TODO find secure rng func
+    for (int i = 0; i < IV_LEN; i++) {
+        iv[i] = (uint8_t)random(0, 256);
     }
 }

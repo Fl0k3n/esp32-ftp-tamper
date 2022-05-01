@@ -8,9 +8,7 @@
 #include "FTPCommandHandler.h"
 #include "Session.h"
 #include "DataProcessor/FTPDataProcessor.h"
-
-#define DATA_CONNECTION_TIMEOUT_MILLIS 500
-
+#include "ftpconf.h"
 
 
 class FTPServiceHandler : public FTPCommandHandler {

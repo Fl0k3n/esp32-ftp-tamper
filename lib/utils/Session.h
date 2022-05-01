@@ -38,7 +38,7 @@ private:
 public:
     SessionMode mode;
 
-    Session(WiFiClient* commandSock);
+    Session(WiFiClient* commandSock, ChaCha* cipher);
 
     SessionStatus getSessionStatus();
     void setSessionStatus(SessionStatus);

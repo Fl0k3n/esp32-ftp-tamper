@@ -1,9 +1,10 @@
 #ifndef DATA_TRANSFER_STATE
 #define DATA_TRANSFER_STATE
-#define DEFAULT_CLIENT_DATA_PORT 50009 // TODO, used in ACTIVE mode when PORT command wasn't sent
 
 #include <WiFi.h>
+#include <ChaCha.h>
 #include <SD.h>
+#include "ftpconf.h"
 
 enum TransferStatus {
     NO_TRANSFER = 0,    // dataSocket mustn't be used
@@ -26,8 +27,17 @@ public:
     String clientDataIP;
     uint16_t clientDataPort;
 
-    TransferState(String clientControlIP)
-        : status(NO_TRANSFER), clientDataIP(clientControlIP), clientDataPort(DEFAULT_CLIENT_DATA_PORT) {}
+
+    ChaCha* cipher;
+    char buf[FTP_BUF_SIZE];
+    uint8_t iv[IV_LEN];
+
+    TransferState(String clientControlIP, ChaCha* cipher)
+        : status(NO_TRANSFER),
+        clientDataIP(clientControlIP),
+        clientDataPort(DEFAULT_CLIENT_DATA_PORT),
+        cipher(cipher)
+    {}
 
     ~TransferState() {
         if (dataSocket.connected())

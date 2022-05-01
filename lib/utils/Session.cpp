@@ -13,6 +13,7 @@ void Session::init() {
     clearMessageBuff();
     workingDirectory = "/";
     isListenningForData = false;
+    readLockCount = writeLockCount = 0;
     fileToRename = "";
 }
 

@@ -9,7 +9,7 @@
 #include "Session.h"
 #include "DataProcessor/FTPDataProcessor.h"
 #include "ftpconf.h"
-
+#include "AccessControler.h"
 
 class FTPServiceHandler : public FTPCommandHandler {
 private:
@@ -17,6 +17,7 @@ private:
     static const int canHandleCmdsNumber;
 
     FTPDataProcessor* dataProcessor;
+    AccessControler* accessControler;
 
     void handleRetrCmd(CommandMessage*, Session*);
     void handleStorCmd(CommandMessage*, Session*);
@@ -39,8 +40,12 @@ private:
     String getFileName(File);
 
     bool assertDataConnectionOpen(Session*);
+    bool assertSDLock(Session*);
+    bool assertCanWrite(Session*);
+    void sendServiceUnavailableMsg(Session*);
+    void finishedWriting(Session*);
 public:
-    FTPServiceHandler(FTPDataProcessor*);
+    FTPServiceHandler(FTPDataProcessor*, AccessControler*);
     bool canHandle(CommandMessage*);
     void handleMessage(CommandMessage*, Session*);
     FTPDataProcessor* getFTPDataProcessor();

@@ -1,7 +1,7 @@
 #include "FTPDataProcessor.h"
 
-FTPDataProcessor::FTPDataProcessor(const uint8_t* cipherKey) {
-    this->cipherKey = cipherKey;
+FTPDataProcessor::FTPDataProcessor(const uint8_t* cipherKey, AccessControler* accessControler)
+    : cipherKey(cipherKey), accessControler(accessControler) {
 }
 
 bool FTPDataProcessor::assertValidCipherConfig() {
@@ -28,29 +28,33 @@ bool FTPDataProcessor::prepareCipher(Session* session, String fileMode, File* op
     ChaCha* chacha = transferState->cipher;
 
     chacha->clear();
+    accessControler->tryLockSd();
+    bool success = true;
 
     if (fileMode == FILE_WRITE) {
         generateIV(transferState->iv);
         if (openFile->write(transferState->iv, IV_LEN) < IV_LEN) {
             Serial.print("CRITICAL: Failed to write IV to ");
             Serial.println(openFile->name());
-            return false;
+            success = false;
         }
     }
     else if (fileMode == FILE_READ) {
         if (openFile->read(transferState->iv, IV_LEN) < IV_LEN) {
             Serial.print("CRITICAL: Failed to read IV from ");
             Serial.println(openFile->name());
-            return false;
+            success = false;
         }
     }
     else {
         Serial.print("CRITICAL: Requested cipher init for file mode: ");
         Serial.println(fileMode);
-        return false;
+        success = false;
     }
 
-    return chacha->setKey(cipherKey, KEY_LEN) && chacha->setIV(transferState->iv, IV_LEN);
+    accessControler->unlockSD();
+
+    return success && chacha->setKey(cipherKey, KEY_LEN) && chacha->setIV(transferState->iv, IV_LEN);
 }
 
 bool FTPDataProcessor::establishDataConnection(Session* session) {
@@ -77,7 +81,9 @@ bool FTPDataProcessor::establishDataConnection(Session* session) {
 }
 
 bool FTPDataProcessor::sendDataChunk(TransferState* transferState) {
+    accessControler->tryLockSd(); // TODO
     int rd = transferState->openFile.readBytes(transferState->buf, FTP_BUF_SIZE);
+    accessControler->unlockSD();
     uint8_t* buf = (uint8_t*)transferState->buf;
 
     if (rd > 0) {
@@ -103,17 +109,21 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
     if (rd > 0) {
         transferState->cipher->encrypt(buf, buf, rd);
         int position = transferState->openFile.position();
+        accessControler->tryLockSd(); // TODO
+
         int written = transferState->openFile.write(buf, rd);
 
         int tries = 1;
         while (written == 0 && tries <= 5) {
             transferState->openFile.close();
-            // TODO check file mode
+            // TODO check file mode (was write)
             transferState->openFile = SD.open(transferState->openFilePath, FILE_APPEND);
             transferState->openFile.seek(position);
             written = transferState->openFile.write(buf, rd);
             tries++;
         }
+
+        accessControler->unlockSD();
 
         if (written == 0) {
             return false;
@@ -125,6 +135,13 @@ bool FTPDataProcessor::receiveDataChunk(TransferState* transferState) {
 void FTPDataProcessor::handleFailedTransfer(Session* session) {
     session->getCommandSocket()->print(
         ResponseMessage("451", "Requested action aborted: error in processing received data; Closing data connection").encode());
+
+    if (session->getTransferState()->status == READ_IN_PROGRESS) {
+        accessControler->finishedReading(session);
+    }
+    else if (session->getTransferState()->status == WRITE_IN_PROGRESS) {
+        accessControler->finishedWriting(session);
+    }
     session->cleanupTransfer();
 }
 
@@ -136,22 +153,25 @@ void FTPDataProcessor::handleDataTransfer(Session* session) {
         if (transferState->status == READ_IN_PROGRESS) {
             // peer closed connection when we still wanted to send data
             session->cleanupTransfer();
+            accessControler->finishedReading(session);
             Serial.println("WARN: peer closed connection");
             return;
         }
         else if (transferState->status == WRITE_IN_PROGRESS) {
             transferState->status = FINISHED;
+            accessControler->finishedWriting(session);
         }
     }
 
-
     if (transferState->status == READ_IN_PROGRESS) {
         bool success = sendDataChunk(transferState);
+        if (transferState->status == FINISHED)
+            accessControler->finishedReading(session);
+
         if (!success) {
             Serial.println("ERROR: Failed to send data chunk");
             handleFailedTransfer(session);
         }
-
     }
     else if (transferState->status == WRITE_IN_PROGRESS) {
         bool success = receiveDataChunk(transferState);
@@ -177,4 +197,8 @@ void FTPDataProcessor::generateIV(uint8_t iv[IV_LEN]) {
     for (int i = 0; i < IV_LEN; i++) {
         iv[i] = (uint8_t)random(0, 256);
     }
+}
+
+AccessControler* FTPDataProcessor::getAccessControler() {
+    return accessControler;
 }

@@ -7,11 +7,13 @@
 #include "ResponseMessage.h"
 #include <Crypto.h>
 #include <ChaCha.h>
+#include "AccessControler.h"
 #include "ftpconf.h"
 
 class FTPDataProcessor {
 private:
     const uint8_t* cipherKey;
+    AccessControler* accessControler;
 
     // assumes that session is ready to send data and file is open for reading/writing
     bool sendDataChunk(TransferState*);
@@ -22,7 +24,7 @@ private:
     void generateIV(uint8_t ivBuff[IV_LEN]);
 
 public:
-    FTPDataProcessor(const uint8_t*);
+    FTPDataProcessor(const uint8_t*, AccessControler*);
 
     // returns true if connection was successully established
     bool establishDataConnection(Session*);
@@ -32,6 +34,12 @@ public:
     bool prepareCipher(Session*, String, File*);
 
     bool assertValidCipherConfig();
+
+    bool tryLockSD();
+
+    void unlockSD();
+
+    AccessControler* getAccessControler();
 };
 
 

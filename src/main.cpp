@@ -32,7 +32,8 @@ EMailSender emailSender(email, email_password);
 
 void ftpServerTask(void*) {
     Serial.println("Starting FTPServer...");
-    FTPDataProcessor dataProcessor(cipherKey);
+    AccessControler accessControler;
+    FTPDataProcessor dataProcessor(cipherKey, &accessControler);
 
     if (!dataProcessor.assertValidCipherConfig()) {
         Serial.println("Invalid cipher confing. FTPServer launching aborted.");
@@ -40,7 +41,7 @@ void ftpServerTask(void*) {
     }
 
     AccessControlHandler accessControlHandler(ftp_username, ftp_password);
-    FTPServiceHandler ftpServiceHandler(&dataProcessor);
+    FTPServiceHandler ftpServiceHandler(&dataProcessor, &accessControler);
     TransferParametersHandler transferParametersHandler;
 
     FTPServer ftpServer(&accessControlHandler, &ftpServiceHandler, &transferParametersHandler);

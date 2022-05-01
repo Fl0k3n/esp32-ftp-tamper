@@ -2,8 +2,13 @@
 
 FTPCommandProcessor::FTPCommandProcessor(Session* session, AccessControlHandler* commandHandler,
     FTPServiceHandler* ftpServiceHandler, TransferParametersHandler* transferParametersHandler)
-    : session(session), dataProcessor(ftpServiceHandler->getFTPDataProcessor()), accessControlHandler(commandHandler),
-    ftpServiceHandler(ftpServiceHandler), transferParametersHandler(transferParametersHandler) {}
+    : session(session),
+    dataProcessor(ftpServiceHandler->getFTPDataProcessor()),
+    accessControlHandler(commandHandler),
+    ftpServiceHandler(ftpServiceHandler),
+    transferParametersHandler(transferParametersHandler) {
+
+}
 
 
 void FTPCommandProcessor::listenForCommands() {
@@ -57,6 +62,8 @@ void FTPCommandProcessor::handleDisconnected() {
         session->getCommandSocket()->stop();
     }
 
+    AccessControler* accessControler = dataProcessor->getAccessControler();
+    accessControler->cleanSessionLocks(session);
     session->cleanupTransfer();
 }
 

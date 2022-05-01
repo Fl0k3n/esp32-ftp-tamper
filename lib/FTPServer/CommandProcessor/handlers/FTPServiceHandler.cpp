@@ -1,12 +1,13 @@
 #include "FTPServiceHandler.h"
 
 
-// no, we wont implement all
 const String FTPServiceHandler::canHandleCmds[] = { "RETR", "STOR", "STOU", "APPE", "ALLO", "REST", "RNFR", "RNTO", "MDTM", "ABOR", "DELE", "RMD", "MKD", "PWD", "LIST", "NLST", "SITE", "SYST", "STAT", "HELP", "NOOP", "SIZE" };
 const int FTPServiceHandler::canHandleCmdsNumber = sizeof(canHandleCmds) / sizeof(canHandleCmds[0]);
 
 
-FTPServiceHandler::FTPServiceHandler(FTPDataProcessor* dataProcessor) :dataProcessor(dataProcessor) {
+FTPServiceHandler::FTPServiceHandler(FTPDataProcessor* dataProcessor, AccessControler* accessControler)
+    : dataProcessor(dataProcessor), accessControler(accessControler)
+{
 
 }
 
@@ -78,14 +79,23 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
     if (!assertValidPathnameArgument(session, msg->data))
         return;
 
+    if (!accessControler->canRead(session)) {
+        sendServiceUnavailableMsg(session);
+        return;
+    }
+
+    accessControler->tryLockSd();
+
     String path = getFilePath(session, msg->data);
     Serial.print("Trying to open file in 'r' mode: ");
     Serial.println(path);
 
     File requestedFile = SD.open(path, FILE_READ);
+    accessControler->unlockSD();
     if (!requestedFile) {
         Serial.println("Failed to open file");
         sendReply(session, "550", "File not found.");
+        accessControler->finishedReading(session);
         return;
     }
 
@@ -97,6 +107,9 @@ void FTPServiceHandler::handleRetrCmd(CommandMessage* msg, Session* session) {
         transferState->openFile = requestedFile;
         transferState->openFilePath = path;
         dataProcessor->prepareCipher(session, FILE_READ, &requestedFile);
+    }
+    else {
+        accessControler->finishedReading(session);
     }
 }
 
@@ -113,6 +126,9 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
         path = getFilePath(session, msg->data);
     }
 
+    if (!assertCanWrite(session))
+        return;
+
     Serial.print("Trying to open file in 'w' mode: ");
     Serial.println(path);
 
@@ -120,8 +136,11 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
     if (!file) {
         Serial.println("Failed to open file");
         sendReply(session, "553", "Failed to create file with a given path");
+        finishedWriting(session);
         return;
     }
+
+    accessControler->unlockSD();
 
     sendReply(session, "150", "File status okay; about to open data connection.");
 
@@ -130,9 +149,12 @@ void FTPServiceHandler::handleStorCmd(CommandMessage* msg, Session* session) {
         transferState->status = WRITE_IN_PROGRESS;
         transferState->openFile = file;
         transferState->openFilePath = path;
-        if (msg->command != "APPE") { // TODO proper APPE handling is not so easy
+        if (msg->command != "APPE") { // TODO proper APPE handling is not so easy, this wont work in most cases
             dataProcessor->prepareCipher(session, FILE_WRITE, &file);
         }
+    }
+    else {
+        accessControler->finishedWriting(session);
     }
 }
 
@@ -163,6 +185,9 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
     else {
         path = getFilePath(session, msg->data);
     }
+
+    if (!assertSDLock(session))
+        return;
 
     File dir = SD.open(session->getWorkingDirectory(), FILE_READ);
     if ((!dir)) {
@@ -199,6 +224,7 @@ void FTPServiceHandler::handleListCmd(CommandMessage* msg, Session* session) {
         }
     }
 
+    accessControler->unlockSD();
     dataSocket->stop();
     if (session->mode == PASSIVE) {
         session->getDataServerSocket()->stop();
@@ -212,6 +238,13 @@ void FTPServiceHandler::handleAborCmd(CommandMessage* msg, Session* session) {
     if (session->getTransferState()->isTransferInProgress())
         sendReply(session, "426", "Transfer aborted");
 
+    if (session->getTransferState()->status == READ_IN_PROGRESS) {
+        accessControler->finishedReading(session);
+    }
+    else if (session->getTransferState()->status == WRITE_IN_PROGRESS) {
+        accessControler->finishedWriting(session);
+    }
+
     session->cleanupTransfer();
 
     sendReply(session, "226", "Aborting OK.");
@@ -222,6 +255,9 @@ void FTPServiceHandler::handleMkdCmd(CommandMessage* msg, Session* session) {
         sendReply(session, "501", "No directory name given");
         return;
     }
+
+    if (!assertSDLock(session))
+        return;
 
     String dirPath = getFilePath(session, msg->data);
 
@@ -238,12 +274,16 @@ void FTPServiceHandler::handleMkdCmd(CommandMessage* msg, Session* session) {
         sendReply(session, "550", "Unable to create directory \"" + dirPath + "\"");
         Serial.println("Unable to create " + dirPath);
     }
+
+    accessControler->unlockSD();
 }
 
 void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
     if (!assertValidPathnameArgument(session, msg->data))
         return;
 
+    if (!assertSDLock(session))
+        return;
 
     String filePath = getFilePath(session, msg->data);
 
@@ -255,22 +295,28 @@ void FTPServiceHandler::handleSizeCmd(CommandMessage* msg, Session* session) {
     File file = SD.open(filePath, FILE_READ);
 
     if (file) {
-        sendReply(session, "213", "File size: " + String(file.size()));
+        sendReply(session, "213", "File size: " + String(file.size() - IV_LEN));
+        file.close();
     }
     else {
         sendReply(session, "450", "Wasn't able to open " + filePath);
     }
+
+    accessControler->unlockSD();
 }
 
 void FTPServiceHandler::handleDeleCmd(CommandMessage* msg, Session* session) {
     if (!assertValidPathnameArgument(session, msg->data))
         return;
 
+    if (!assertCanWrite(session))
+        return;
 
     String filePath = getFilePath(session, msg->data);
 
     if (!SD.exists(filePath)) {
         sendReply(session, "550", "File/directory with this path does not exist");
+        finishedWriting(session);
         return;
     }
 
@@ -288,6 +334,8 @@ void FTPServiceHandler::handleDeleCmd(CommandMessage* msg, Session* session) {
         else
             sendReply(session, "550", "Couldn't delete directory " + filePath);
     }
+
+    finishedWriting(session);
 }
 
 void FTPServiceHandler::handleRmdCmd(CommandMessage* msg, Session* session) {
@@ -298,14 +346,19 @@ void FTPServiceHandler::handleRnfrCmd(CommandMessage* msg, Session* session) {
     if (!assertValidPathnameArgument(session, msg->data))
         return;
 
+    if (!assertCanWrite(session)) {
+        return;
+    }
 
     String fileToRename = getFilePath(session, msg->data);
 
     if (!SD.exists(fileToRename)) {
         sendReply(session, "550", "File with such name was not found");
+        finishedWriting(session);
         return;
     }
 
+    accessControler->unlockSD();
     session->setFileToRename(fileToRename);
 
     sendReply(session, "350", "RNFR accepted. Waiting for RNTO command.");
@@ -321,10 +374,13 @@ void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
         return;
     }
 
+    accessControler->tryLockSd(); // TODO
+
     String newFileName = getFilePath(session, msg->data);
 
     if (SD.exists(newFileName)) {
         sendReply(session, "553", "File with given filename already exists");
+        finishedWriting(session);
         return;
     }
 
@@ -337,6 +393,7 @@ void FTPServiceHandler::handleRntoCmd(CommandMessage* msg, Session* session) {
         sendReply(session, "451", "Renaming file failed");
     }
     session->clearFileToRename();
+    finishedWriting(session);
 }
 
 void FTPServiceHandler::handleAppeCmd(CommandMessage* msg, Session* session) {
@@ -447,4 +504,36 @@ bool FTPServiceHandler::assertDataConnectionOpen(Session* session) {
     }
 
     return connectionEstablished;
+}
+
+void FTPServiceHandler::sendServiceUnavailableMsg(Session* session) {
+    sendReply(session, "421", "Service not available, try again later.");
+}
+
+bool FTPServiceHandler::assertSDLock(Session* session) {
+    // TODO
+    if (!accessControler->tryLockSd()) {
+        Serial.println("CRITICAL: Failed to lock SD");
+        return false;
+    }
+    return true;
+}
+
+bool FTPServiceHandler::assertCanWrite(Session* session) {
+    if (!accessControler->canWrite(session)) {
+        sendServiceUnavailableMsg(session);
+        return false;
+    }
+
+    if (!assertSDLock(session)) {
+        accessControler->finishedWriting(session);
+        return false;
+    }
+
+    return true;
+}
+
+void FTPServiceHandler::finishedWriting(Session* session) {
+    accessControler->finishedWriting(session);
+    accessControler->unlockSD();
 }

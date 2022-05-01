@@ -3,6 +3,7 @@
 
 #define DEFAULT_CLIENT_DATA_PORT 50009 // used in ACTIVE mode when PORT command wasn't sent
 #define CONTROL_SERVER_PORT 21
+#define MAX_CLIENTS 5
 
 #define FTP_BUF_SIZE 4096
 

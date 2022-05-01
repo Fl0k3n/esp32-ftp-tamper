@@ -12,6 +12,7 @@ typedef struct CommandProcessorParams {
     AccessControlHandler* accessControlHandler;
     FTPServiceHandler* ftpServiceHandler;
     TransferParametersHandler* transferParametersHandler;
+    AccessControler* accessControler;
 } CommandProcessorParams;
 
 

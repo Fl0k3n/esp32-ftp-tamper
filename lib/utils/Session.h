@@ -36,6 +36,9 @@ private:
     uint16_t dataPort;
 
 public:
+    // reentrant locks
+    unsigned int readLockCount;
+    unsigned int writeLockCount;
     SessionMode mode;
 
     Session(WiFiClient* commandSock, ChaCha* cipher);

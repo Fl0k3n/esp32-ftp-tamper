@@ -3,32 +3,26 @@
 #include <SD.h>
 #include <ChaCha.h>
 #include <FTPServer.h>
-#include <EMailSender.h>
 #include <KeypadModule.h>
 #include <LightSensor.h>
+#include <MotionSensor.h>
+#include <TamperGuard.h>
 
+#include "EmailService.h"
 #include "config.h"
 #include "cipher_key.h"
 
-#define BAUD 9600
+#define BAUD 115200
 #define WIFI_INIT_TIMEOUT 15
 #define LED_PIN 15
 
-
-enum SecureMode {
-    SECURE = 0,
-    UNSECURE = 1
-};
-
-SecureMode secureMode;
-
+TaskHandle_t tamperGuardTaskHandle;
 TaskHandle_t FTPServerTask;
 TaskHandle_t KeypadModuleTask;
 TaskHandle_t LightSensorTask;
+TaskHandle_t movementDetectionTaskHandle;
 
-KeypadModule* keypadModule;
-
-EMailSender emailSender(email, email_password);
+TamperGuard* tamperGuard;
 
 void ftpServerTask(void*) {
     Serial.println("Starting FTPServer...");
@@ -47,29 +41,58 @@ void ftpServerTask(void*) {
     ftpServer.run();
 }
 
+
+void tamperGuardTask(void*) {
+    // TODO emails count
+    EmailService emailService(email, email_password, emails_to_notify, 1);
+    TamperGuard guard(&emailService);
+    tamperGuard = &guard;
+    tamperGuard->run();
+}
+
 void keypadModuleTask(void*) {
     Serial.println("To switch device mode between secure and unsecure, enter pin anytime.");
-    while (keypadModule->enterPin()) {
-        if (secureMode == SECURE) {
-            Serial.println("Changed device mode to unsecure");
-            digitalWrite(LED_PIN, LOW);
-            secureMode = UNSECURE;
-        }
-        else {
-            Serial.println("Changed device mode to secure");
-            digitalWrite(LED_PIN, HIGH);
-            secureMode = SECURE;
-        }
+    KeypadModule keypadModule(pin, 8);
+
+    while (true) {
+        bool isCorrect = keypadModule.awaitPin();
+
+        tamperGuard->registerIntrusion({
+            .detector = KEYPAD,
+            .timestamp = xTaskGetTickCount(),
+            .sensorData = (void*)(isCorrect ? CORRECT_PIN : INCORRECT_PIN)
+            });
     }
-    Serial.println("Entered wrong pin too many times. Restarting the device...");
-    ESP.restart(); // just for now, dont know how to really handle this
-    vTaskDelete(NULL);
 }
 
 void lightSensorTask(void*) {
     LightSensor lightSensor = LightSensor();
+    // TODO
     lightSensor.run();
     vTaskDelete(NULL);
+}
+
+void movementDetectionTask(void*) {
+    MotionSensor motionSensor;
+    if (!motionSensor.init(0.3, 0.2)) {
+        Serial.println("Failed to init MPU, check I2C connection");
+        vTaskDelete(NULL);
+    }
+
+    motionSensor.calibrate();
+
+    while (true) {
+        vTaskDelay(250 / portTICK_PERIOD_MS);
+
+        if (motionSensor.isMovementDetected()) {
+            tamperGuard->registerIntrusion({
+                .detector = MOTION,
+                .timestamp = xTaskGetTickCount()
+                });
+
+            motionSensor.calibrate();
+        }
+    }
 }
 
 void initSD() {
@@ -79,39 +102,6 @@ void initSD() {
         Serial.println("Error: SD card initialization failed. Try to fix the error and restart the device");
         while (true) {}
     }
-
-    Serial.println("creating test file at /test.txt");
-    File f = SD.open("/test.txt", "w");
-    if (!f) {
-        Serial.println("failed to open");
-        return;
-    }
-
-    char msg[] = "content";
-    int written = f.print(msg);
-
-    Serial.printf("written: %d\n", written);
-
-    f.close();
-
-    f = SD.open("/test.txt", "r");
-
-    String content = f.readString();
-    Serial.print("Got ");
-    Serial.println(content);
-    f.close();
-}
-
-void initKeypadModule() {
-    keypadModule = new KeypadModule(pin, 8);
-    Serial.println("Enter pin: ");
-    if (!keypadModule->enterPin()) {
-        Serial.println("ENTERED WRONG PIN TOO MANY TIMES. ABORTING LAUCHING THE DEVICE");
-        while (true) {}
-    }
-    Serial.println("Entering secure mode");
-    secureMode = SECURE;
-    digitalWrite(LED_PIN, HIGH);
 }
 
 void checkWiFiConnectionTimeout(int* tries) {
@@ -137,17 +127,6 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
 }
 
-void sendWarningMails(String message) {
-    EMailSender::EMailMessage msg;
-    msg.subject = "TAMPER WARNING - ESP32 FTP SERVER";
-    msg.message = message;
-
-    EMailSender::Response response = emailSender.send(emails_to_notify, sizeof(emails_to_notify) / sizeof(emails_to_notify[0]), msg);
-    Serial.println("Sending warning mails status: ");
-    Serial.println("code: " + response.code);
-    Serial.println("desc: " + response.desc);
-}
-
 void setup() {
     Serial.begin(BAUD);
     while (!Serial) {
@@ -158,10 +137,18 @@ void setup() {
     digitalWrite(LED_PIN, LOW);
 
     initSD();
-    // initKeypadModule();
     connectToWiFi();
 
-    // sendWarningMails("Warning here"); // tested - everything is correct
+    // assert that this task has max priority
+    xTaskCreatePinnedToCore(
+        tamperGuardTask,
+        "tamperGuardTask",
+        8192,
+        NULL,
+        10,
+        &tamperGuardTaskHandle,
+        0);
+
 
     xTaskCreatePinnedToCore(
         ftpServerTask, /* Task function. */
@@ -173,27 +160,39 @@ void setup() {
         1          /* Core where the task should run */
     );
 
-    // xTaskCreatePinnedToCore(
-    //   keypadModuleTask,
-    //   "KeypadModuleTask",
-    //   8192,
-    //   NULL,
-    //   1,
-    //   &KeypadModuleTask,
-    //   0
-    // );
+    xTaskCreatePinnedToCore(
+        keypadModuleTask,
+        "KeypadModuleTask",
+        8192,
+        NULL,
+        1,
+        &KeypadModuleTask,
+        0
+    );
 
     // xTaskCreatePinnedToCore(
-    //   lightSensorTask,
-    //   "LightSensorTask",
-    //   8192,
-    //   NULL,
-    //   1,
-    //   &LightSensorTask,
-    //   0
+    //     lightSensorTask,
+    //     "LightSensorTask",
+    //     8192,
+    //     NULL,
+    //     1,
+    //     &LightSensorTask,
+    //     0
     // );
+
+    xTaskCreatePinnedToCore(
+        movementDetectionTask,
+        "movementDetectionTask",
+        8192,
+        NULL,
+        1,
+        &movementDetectionTaskHandle,
+        0);
+
 }
 
+
 void loop() {
-    vTaskDelay(1);
+    // Serial.println("loop");
+    vTaskDelay(1000);
 }

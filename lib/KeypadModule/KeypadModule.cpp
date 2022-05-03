@@ -5,34 +5,24 @@ KeypadModule::KeypadModule(const char* pin, int maxPinLength) {
     this->maxPinLength = maxPinLength;
 }
 
-bool KeypadModule::enterPin() {
+bool KeypadModule::awaitPin() {
 
     String inputPin;
     inputPin.reserve(8);
     inputPin = "";
 
-    int tries = 0;
-
-    while (tries < TRIES) {
+    while (true) {
         char key = keypad.getKey();
 
         if (key) {
             Serial.print(key);
             if (key == '*') {
-                Serial.println();
                 Serial.println("INPUT PIN CLEARED");
                 inputPin = "";
             }
             else if (key == '#') {
-                Serial.println();
                 Serial.println(inputPin);
-                if (inputPin == pin) {
-                    Serial.println("CORRECT PIN. ACCESS GRANTED");
-                    return true;
-                }
-                tries++;
-                Serial.println("WRONG PIN. ACCESS DENIED \nTry again... " + String(TRIES - tries) + " tries left");
-                inputPin = "";
+                return inputPin == pin;
             }
             else {
                 inputPin += key;

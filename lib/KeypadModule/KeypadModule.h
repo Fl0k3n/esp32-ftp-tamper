@@ -6,10 +6,9 @@
 
 #define ROW_NUM     4
 #define COLUMN_NUM  4
-#define TRIES 5
 
 class KeypadModule {
-  private:
+private:
 
     char keys[ROW_NUM][COLUMN_NUM] = {
       {'1', '2', '3', 'A'},
@@ -18,15 +17,15 @@ class KeypadModule {
       {'*', '0', '#', 'D'}
     };
 
-    byte pin_rows[ROW_NUM]      = {32, 33, 25, 26};
-    byte pin_column[COLUMN_NUM] = {27, 14, 12, 13};
+    byte pin_rows[ROW_NUM] = { 32, 33, 25, 26 };
+    byte pin_column[COLUMN_NUM] = { 27, 14, 12, 13 };
 
-    Keypad keypad = Keypad( makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM );
+    Keypad keypad = Keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM);
     String pin;
     int maxPinLength;
-  public:
+public:
     KeypadModule(const char* pin, int maxPinLength);
-    bool enterPin();
+    bool awaitPin();
 };
 
 

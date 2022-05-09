@@ -9,12 +9,17 @@
 #include <TamperGuard.h>
 
 #include "EmailService.h"
+#include "PreferencesHandler.h"
 #include "config.h"
 #include "cipher_key.h"
 
 #define BAUD 115200
 #define WIFI_INIT_TIMEOUT 15
 #define LED_PIN 15
+
+
+PreferencesHandler prefs;
+
 
 TaskHandle_t tamperGuardTaskHandle;
 TaskHandle_t FTPServerTask;
@@ -23,7 +28,6 @@ TaskHandle_t LightSensorTask;
 TaskHandle_t movementDetectionTaskHandle;
 
 TamperGuard* tamperGuard;
-
 void ftpServerTask(void*) {
     Serial.println("Starting FTPServer...");
     FTPDataProcessor dataProcessor(cipherKey);
@@ -95,6 +99,13 @@ void movementDetectionTask(void*) {
     }
 }
 
+void initSerial() {
+    Serial.begin(BAUD);
+    while (!Serial) {
+
+    }
+}
+
 void initSD() {
     if (SD.begin())
         Serial.println("SD card successfully initialized");
@@ -127,27 +138,59 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
 }
 
-void setup() {
-    Serial.begin(BAUD);
-    while (!Serial) {
+// void setupGpio() {
+//     // 14 lower 
+//     // 32 higher
+//     Serial.println("setting up gpio");
+//     pinMode(14, INPUT_PULLDOWN);
+//     pinMode(32, OUTPUT);
 
+//     digitalWrite(32, HIGH);
+// }
+
+
+void initPreferences() {
+    if (!prefs.begin()) {
+        Serial.println("Required preferences not found, checking SD");
     }
 
-    pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, LOW);
+    if (!prefs.loadFromSDCard()) {
+        Serial.println("Required preferences not found on SD card, creating config dump...");
+        prefs.dumpToConfigFile();
+        Serial.println("Config dump created at " + String(CONFIG_FILENAME) + " fix it and restart, aborting init.");
 
+        // while (true) {
+
+        // }
+    }
+}
+
+void setup() {
+    initSerial();
     initSD();
+    delay(2000);
+    String content = "secret=...\nssid=...\n...";
+    File f = SD.open(CONFIG_FILENAME, "w");
+    f.print(content);
+    f.close();
+    initPreferences();
+
+    prefs.printPrefs();
+
+    // pinMode(LED_PIN, OUTPUT);
+    // digitalWrite(LED_PIN, LOW);
+
     connectToWiFi();
 
-    // assert that this task has max priority
-    xTaskCreatePinnedToCore(
-        tamperGuardTask,
-        "tamperGuardTask",
-        8192,
-        NULL,
-        10,
-        &tamperGuardTaskHandle,
-        0);
+    // // assert that this task has max priority
+    // xTaskCreatePinnedToCore(
+    //     tamperGuardTask,
+    //     "tamperGuardTask",
+    //     8192,
+    //     NULL,
+    //     10,
+    //     &tamperGuardTaskHandle,
+    //     0);
 
 
     xTaskCreatePinnedToCore(
@@ -160,15 +203,15 @@ void setup() {
         1          /* Core where the task should run */
     );
 
-    xTaskCreatePinnedToCore(
-        keypadModuleTask,
-        "KeypadModuleTask",
-        8192,
-        NULL,
-        1,
-        &KeypadModuleTask,
-        0
-    );
+    // xTaskCreatePinnedToCore(
+    //     keypadModuleTask,
+    //     "KeypadModuleTask",
+    //     8192,
+    //     NULL,
+    //     1,
+    //     &KeypadModuleTask,
+    //     0
+    // );
 
     // xTaskCreatePinnedToCore(
     //     lightSensorTask,
@@ -180,19 +223,24 @@ void setup() {
     //     0
     // );
 
-    xTaskCreatePinnedToCore(
-        movementDetectionTask,
-        "movementDetectionTask",
-        8192,
-        NULL,
-        1,
-        &movementDetectionTaskHandle,
-        0);
+    // xTaskCreatePinnedToCore(
+    //     movementDetectionTask,
+    //     "movementDetectionTask",
+    //     8192,
+    //     NULL,
+    //     1,
+    //     &movementDetectionTaskHandle,
+    //     0);
 
+    Serial.println("setup done");
 }
 
 
 void loop() {
-    // Serial.println("loop");
+    Serial.println("loop");
+    // int pin14 = digitalRead(14);
+    // int pin32 = digitalRead(32);
+    // Serial.printf("14: %d | 32: %d\n", pin14, pin32);
     vTaskDelay(1000);
+    // delay(1000);
 }

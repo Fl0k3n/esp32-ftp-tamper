@@ -71,8 +71,29 @@ void keypadModuleTask(void*) {
 
 void lightSensorTask(void*) {
     LightSensor lightSensor = LightSensor();
-    // TODO
-    lightSensor.run();
+
+    while (true) {
+        int val = lightSensor.readValueFromLightSensor();
+
+        Serial.println("Light sensor: " + String(val));
+
+        lightSensor.processNewLightValue(val);
+        if (lightSensor.checkForAnomaly()) {
+            Serial.println("DETECTED------------------------------");
+            tamperGuard->registerIntrusion({
+                .detector = LIGHT,
+                .timestamp = xTaskGetTickCount()
+                });
+
+            Serial.println("REGISTERED------------------------------");
+            lightSensor.resetAnomalies();
+            Serial.println("resteted1------------------------------");
+            lightSensor.resetLightValues();
+            Serial.println("resteted2------------------------------");
+        }
+
+        vTaskDelay(200);
+    }
     vTaskDelete(NULL);
 }
 
@@ -182,15 +203,15 @@ void setup() {
 
     connectToWiFi();
 
-    // // assert that this task has max priority
-    // xTaskCreatePinnedToCore(
-    //     tamperGuardTask,
-    //     "tamperGuardTask",
-    //     8192,
-    //     NULL,
-    //     10,
-    //     &tamperGuardTaskHandle,
-    //     0);
+    // assert that this task has max priority
+    xTaskCreatePinnedToCore(
+        tamperGuardTask,
+        "tamperGuardTask",
+        8192,
+        NULL,
+        10,
+        &tamperGuardTaskHandle,
+        0);
 
 
     xTaskCreatePinnedToCore(
@@ -213,15 +234,15 @@ void setup() {
     //     0
     // );
 
-    // xTaskCreatePinnedToCore(
-    //     lightSensorTask,
-    //     "LightSensorTask",
-    //     8192,
-    //     NULL,
-    //     1,
-    //     &LightSensorTask,
-    //     0
-    // );
+    xTaskCreatePinnedToCore(
+        lightSensorTask,
+        "LightSensorTask",
+        8192,
+        NULL,
+        1,
+        &LightSensorTask,
+        0
+    );
 
     // xTaskCreatePinnedToCore(
     //     movementDetectionTask,

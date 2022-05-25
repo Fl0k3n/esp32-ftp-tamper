@@ -8,11 +8,10 @@ class EmailService {
 private:
     EMailSender emailSender;
 
-    const char** emailRecipients;
-    size_t recipientsCount;
+    const char* emailRecipient;
 public:
-    EmailService(const char* email, const char* emailPassword, const char** emailRecipients, int recipientsCount) :
-        emailSender(email, emailPassword), emailRecipients(emailRecipients), recipientsCount(recipientsCount) {
+    EmailService(const char* email, const char* emailPassword, const char* emailRecipient) :
+        emailSender(email, emailPassword), emailRecipient(emailRecipient) {
 
     }
 
@@ -21,7 +20,7 @@ public:
         msg.subject = title;
         msg.message = message;
 
-        EMailSender::Response response = emailSender.send(emailRecipients, recipientsCount, msg);
+        EMailSender::Response response = emailSender.send(&emailRecipient, 1, msg);
         Serial.println("Sending warning mails status: ");
         Serial.println("code: " + response.code);
         Serial.println("desc: " + response.desc);

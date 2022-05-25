@@ -21,11 +21,9 @@ private:
     byte pin_column[COLUMN_NUM] = { 27, 14, 12, 13 };
 
     Keypad keypad = Keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM);
-    String pin;
-    int maxPinLength;
 public:
-    KeypadModule(const char* pin, int maxPinLength);
-    bool awaitPin();
+    bool awaitExactInput(String exact);
+    size_t awaitInput(char* buff, int maxLen);
 };
 
 

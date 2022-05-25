@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 #include "EmailService.h"
+#include "PreferencesHandler.h"
+#include "StateSignaler.h"
+#include "TimeoutHandler.h"
 
 #define INTRUSION_QUEUE_SIZE 16
 
@@ -10,10 +13,13 @@
 #define CORRECT_PIN 1
 #define INCORRECT_PIN 0
 
+#define SECURE_MODE_TIMEOUT_MS (5 * 60 * 1000) // 5 minutes
+
 typedef enum tamper_sensor_t {
-    MOTION, // data is NULL
-    LIGHT,  // data is NULL
-    KEYPAD  // data is int which equals 1 iff pin was entered correctly
+    MOTION,  // data is NULL
+    LIGHT,   // data is NULL
+    KEYPAD,  // data is int which equals 1 iff pin was entered correctly
+    TIMER,   // data is NULL
 } tamper_sensor_t;
 
 
@@ -29,17 +35,36 @@ typedef struct Intrusion {
 } Intrusion;
 
 
+const Intrusion TIMER_INTRUSION = {
+    .detector = TIMER
+};
+
 class TamperGuard {
 private:
+    TimeoutHandler timeoutHandler;
+    xTaskHandle timeoutTask;
     xQueueHandle intrusionQueue;
+    TimeoutArgs timeoutArgs;
+
     EmailService* emailService;
+    PreferencesHandler* prefs;
+    StateSignaler* signaler;
+
+    xTaskHandle* tasksToStop;
+    int tasksToStopCount;
+
     SecurityMode mode;
     unsigned int invalidPinRetries;
 
     void handleIntrusion(Intrusion);
     void handleKeypadIntrusion(Intrusion);
+
+    void handleSecurityBreach();
+
+    void switchToSecureMode();
+    void switchToUnsecureMode(bool shouldStopTimer);
 public:
-    TamperGuard(EmailService*);
+    TamperGuard(EmailService*, PreferencesHandler*, StateSignaler*, xTaskHandle*, int);
     void registerIntrusion(Intrusion);
     void enterSecurityMode(SecurityMode);
     void run();

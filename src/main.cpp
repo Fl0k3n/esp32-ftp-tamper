@@ -10,16 +10,15 @@
 
 #include "EmailService.h"
 #include "PreferencesHandler.h"
-#include "config.h"
-#include "cipher_key.h"
+#include "StateSignaler.h"
 
 #define BAUD 115200
 #define WIFI_INIT_TIMEOUT 15
-#define LED_PIN 15
-
+#define LED_PIN 2
 
 PreferencesHandler prefs;
-
+StateSignaler signaler;
+TamperGuard* tamperGuard;
 
 TaskHandle_t tamperGuardTaskHandle;
 TaskHandle_t FTPServerTask;
@@ -27,17 +26,20 @@ TaskHandle_t KeypadModuleTask;
 TaskHandle_t LightSensorTask;
 TaskHandle_t movementDetectionTaskHandle;
 
-TamperGuard* tamperGuard;
+void infLoop() {
+    while (true) {}
+}
+
 void ftpServerTask(void*) {
     Serial.println("Starting FTPServer...");
-    FTPDataProcessor dataProcessor(cipherKey);
+    FTPDataProcessor dataProcessor(prefs.secretKey);
 
     if (!dataProcessor.assertValidCipherConfig()) {
         Serial.println("Invalid cipher confing. FTPServer launching aborted.");
         vTaskDelete(NULL);
     }
 
-    AccessControlHandler accessControlHandler(ftp_username, ftp_password);
+    AccessControlHandler accessControlHandler(prefs.ftpUsername.c_str(), prefs.ftpPasswd.c_str());
     FTPServiceHandler ftpServiceHandler(&dataProcessor);
     TransferParametersHandler transferParametersHandler;
 
@@ -47,19 +49,17 @@ void ftpServerTask(void*) {
 
 
 void tamperGuardTask(void*) {
-    // TODO emails count
-    EmailService emailService(email, email_password, emails_to_notify, 1);
-    TamperGuard guard(&emailService);
+    EmailService emailService(prefs.email.c_str(), prefs.emailPasswd.c_str(), prefs.emailToNotify.c_str());
+    TamperGuard guard(&emailService, &prefs, &signaler, { &FTPServerTask }, 1);
     tamperGuard = &guard;
     tamperGuard->run();
 }
 
 void keypadModuleTask(void*) {
-    Serial.println("To switch device mode between secure and unsecure, enter pin anytime.");
-    KeypadModule keypadModule(pin, 8);
+    KeypadModule keypadModule;
 
     while (true) {
-        bool isCorrect = keypadModule.awaitPin();
+        bool isCorrect = keypadModule.awaitExactInput(prefs.pin);
 
         tamperGuard->registerIntrusion({
             .detector = KEYPAD,
@@ -75,21 +75,17 @@ void lightSensorTask(void*) {
     while (true) {
         int val = lightSensor.readValueFromLightSensor();
 
-        Serial.println("Light sensor: " + String(val));
+        // Serial.println("Light sensor: " + String(val));
 
         lightSensor.processNewLightValue(val);
         if (lightSensor.checkForAnomaly()) {
-            Serial.println("DETECTED------------------------------");
             tamperGuard->registerIntrusion({
                 .detector = LIGHT,
                 .timestamp = xTaskGetTickCount()
                 });
 
-            Serial.println("REGISTERED------------------------------");
             lightSensor.resetAnomalies();
-            Serial.println("resteted1------------------------------");
             lightSensor.resetLightValues();
-            Serial.println("resteted2------------------------------");
         }
 
         vTaskDelay(200);
@@ -132,7 +128,7 @@ void initSD() {
         Serial.println("SD card successfully initialized");
     else {
         Serial.println("Error: SD card initialization failed. Try to fix the error and restart the device");
-        while (true) {}
+        infLoop();
     }
 }
 
@@ -140,13 +136,13 @@ void checkWiFiConnectionTimeout(int* tries) {
     (*tries)++;
     if (*tries == WIFI_INIT_TIMEOUT) {
         Serial.println("\nError: Unable to connect to WiFi with given ssid and password. Try to fix the error and restart the device");
-        while (true) {}
+        infLoop();
     }
 }
 
 void connectToWiFi() {
     Serial.print("Trying to connect to WiFi...");
-    WiFi.begin(ssid, wifi_password);
+    WiFi.begin(prefs.ssid.c_str(), prefs.wifiPasswd.c_str());
 
     int tries = 0;
     while (WiFi.status() != WL_CONNECTED) {
@@ -159,47 +155,60 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
 }
 
-// void setupGpio() {
-//     // 14 lower 
-//     // 32 higher
-//     Serial.println("setting up gpio");
-//     pinMode(14, INPUT_PULLDOWN);
-//     pinMode(32, OUTPUT);
-
-//     digitalWrite(32, HIGH);
-// }
-
 
 void initPreferences() {
     if (!prefs.begin()) {
         Serial.println("Required preferences not found, checking SD");
+
+        if (!prefs.loadFromSDCard()) {
+            Serial.println("Required preferences not found on SD card, creating config dump...");
+            prefs.createConfigFileExample();
+            Serial.println("Config example created at " + String(CONFIG_FILENAME) + " fix it and restart, aborting init.");
+
+            infLoop();
+        }
+        else {
+            Serial.println("Using new config from SD");
+        }
     }
+    else {
+        // prefs.flushConfig();
+        KeypadModule keypad;
+        Serial.println("Preferences found, please enter PIN");
+        prefs.printPrefs(); // TODO testing only
 
-    if (!prefs.loadFromSDCard()) {
-        Serial.println("Required preferences not found on SD card, creating config dump...");
-        prefs.dumpToConfigFile();
-        Serial.println("Config dump created at " + String(CONFIG_FILENAME) + " fix it and restart, aborting init.");
+        while (prefs.getPinRetriesLeft() > 0) {
+            if (keypad.awaitExactInput(prefs.pin)) {
+                prefs.resetPinRetries();
+                break;
+            }
+            else {
+                prefs.setPinRetriesLeft(prefs.getPinRetriesLeft() - 1);
+                Serial.printf("Invalid PIN, you have %d retries left\n", prefs.getPinRetriesLeft());
+            }
+        }
 
-        // while (true) {
+        if (prefs.getPinRetriesLeft() <= 0) {
+            prefs.clearSecrets();
+            prefs.printPrefs();
+            Serial.println("Preferences cleared, aborting init...");
+            infLoop();
+        }
 
-        // }
+        if (prefs.loadFromSDIfPresent()) {
+            Serial.println("Using new config from SD");
+        }
     }
 }
 
 void setup() {
     initSerial();
     initSD();
+    signaler.init();
     delay(2000);
-    String content = "secret=...\nssid=...\n...";
-    File f = SD.open(CONFIG_FILENAME, "w");
-    f.print(content);
-    f.close();
     initPreferences();
 
     prefs.printPrefs();
-
-    // pinMode(LED_PIN, OUTPUT);
-    // digitalWrite(LED_PIN, LOW);
 
     connectToWiFi();
 
@@ -224,15 +233,15 @@ void setup() {
         1          /* Core where the task should run */
     );
 
-    // xTaskCreatePinnedToCore(
-    //     keypadModuleTask,
-    //     "KeypadModuleTask",
-    //     8192,
-    //     NULL,
-    //     1,
-    //     &KeypadModuleTask,
-    //     0
-    // );
+    xTaskCreatePinnedToCore(
+        keypadModuleTask,
+        "KeypadModuleTask",
+        8192,
+        NULL,
+        1,
+        &KeypadModuleTask,
+        0
+    );
 
     xTaskCreatePinnedToCore(
         lightSensorTask,
@@ -244,24 +253,19 @@ void setup() {
         0
     );
 
-    // xTaskCreatePinnedToCore(
-    //     movementDetectionTask,
-    //     "movementDetectionTask",
-    //     8192,
-    //     NULL,
-    //     1,
-    //     &movementDetectionTaskHandle,
-    //     0);
+    xTaskCreatePinnedToCore(
+        movementDetectionTask,
+        "movementDetectionTask",
+        8192,
+        NULL,
+        1,
+        &movementDetectionTaskHandle,
+        0);
 
     Serial.println("setup done");
 }
 
 
 void loop() {
-    Serial.println("loop");
-    // int pin14 = digitalRead(14);
-    // int pin32 = digitalRead(32);
-    // Serial.printf("14: %d | 32: %d\n", pin14, pin32);
     vTaskDelay(1000);
-    // delay(1000);
 }

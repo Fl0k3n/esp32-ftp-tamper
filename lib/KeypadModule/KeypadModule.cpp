@@ -1,14 +1,9 @@
 #include "KeypadModule.h"
 
-KeypadModule::KeypadModule(const char* pin, int maxPinLength) {
-    this->pin = String(pin);
-    this->maxPinLength = maxPinLength;
-}
-
-bool KeypadModule::awaitPin() {
+bool KeypadModule::awaitExactInput(String exact) {
 
     String inputPin;
-    inputPin.reserve(8);
+    inputPin.reserve(exact.length());
     inputPin = "";
 
     while (true) {
@@ -17,12 +12,12 @@ bool KeypadModule::awaitPin() {
         if (key) {
             Serial.print(key);
             if (key == '*') {
-                Serial.println("INPUT PIN CLEARED");
+                Serial.println("Keypad input cleared");
                 inputPin = "";
             }
             else if (key == '#') {
                 Serial.println(inputPin);
-                return inputPin == pin;
+                return inputPin == exact;
             }
             else {
                 inputPin += key;
@@ -32,3 +27,30 @@ bool KeypadModule::awaitPin() {
     }
     return false;
 }
+
+
+size_t KeypadModule::awaitInput(char* buff, int maxLen) {
+    size_t i = 0;
+
+    for (;i < maxLen; i++) {
+        char key = keypad.getKey();
+
+        switch (key) {
+        case '*':
+            i = 0;
+            break;
+        case '#':
+            return i;
+        case '/0':
+            break;
+        default:
+            buff[i] = key;
+        }
+
+        vTaskDelay(1);
+    }
+
+    Serial.println("Max input length reached, commiting");
+    return i;
+}
+

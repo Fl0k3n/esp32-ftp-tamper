@@ -13,7 +13,7 @@
 #define CORRECT_PIN 1
 #define INCORRECT_PIN 0
 
-#define SECURE_MODE_TIMEOUT_MS (5 * 60 * 1000) // 5 minutes
+#define SECURE_MODE_TIMEOUT_MS (3 * 60 * 1000) // 3 minutes
 
 typedef enum tamper_sensor_t {
     MOTION,  // data is NULL

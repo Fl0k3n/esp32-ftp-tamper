@@ -30,7 +30,7 @@ public:
         xTaskCreate(
             awaitTimeout,
             "timer",
-            512,
+            2048,
             args,
             TIMER_TASK_PRIORITY,
             &timerHandle            

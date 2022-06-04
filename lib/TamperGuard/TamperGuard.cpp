@@ -68,11 +68,11 @@ void TamperGuard::handleIntrusion(Intrusion intrusion) {
     {
     case MOTION:
         Serial.println("motion sensor detected movement");
-        // handleSecurityBreach();
+        handleSecurityBreach();
         break;
     case LIGHT:
         Serial.println("light sensor detected light");
-        // handleSecurityBreach();
+        handleSecurityBreach();
         break;
     case KEYPAD:
         handleKeypadIntrusion(intrusion);
@@ -101,7 +101,7 @@ void TamperGuard::handleKeypadIntrusion(Intrusion intrusion) {
 }
 
 void TamperGuard::handleSecurityBreach() {
-    prefs->clearSecrets();
+    // prefs->clearSecrets();
     emailService->sendEmail("TAMPER WARNING - ESP32 FTP SERVER", "check this out");
 
     for (int i = 0; i < tasksToStopCount; i++) {
@@ -109,9 +109,7 @@ void TamperGuard::handleSecurityBreach() {
     }
 
     signaler->signalInfiniteLoopEntered();
-    while (true) {
-
-    }
+    vTaskDelete(NULL);
 }
 
 

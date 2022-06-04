@@ -41,7 +41,7 @@ size_t KeypadModule::awaitInput(char* buff, int maxLen) {
             break;
         case '#':
             return i;
-        case '/0':
+        case '\0':
             break;
         default:
             buff[i] = key;

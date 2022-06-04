@@ -3,25 +3,35 @@
 
 #include <Arduino.h>
 
-#define LED_PIN 2
+#define GREEN_LED_PIN 4
+#define RED_LED_PIN 2
 
 class StateSignaler {
 public:
     void init() {
-        pinMode(LED_PIN, OUTPUT);
-        digitalWrite(LED_PIN, HIGH);
+        // DONT use Serial here
+        pinMode(GREEN_LED_PIN, OUTPUT);
+        pinMode(RED_LED_PIN, OUTPUT);
+        digitalWrite(GREEN_LED_PIN, LOW);
+        digitalWrite(RED_LED_PIN, HIGH);
     }
 
     void signalSecureModeEntered() {
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(GREEN_LED_PIN, HIGH);
     }
 
     void signalUnsecureModeEntered() {
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(GREEN_LED_PIN, LOW);
+    }
+
+    void signalSetupFinished() {
+        Serial.println("setup done");
+        digitalWrite(RED_LED_PIN, LOW);
     }
 
     void signalInfiniteLoopEntered() {
-        // TODO
+        digitalWrite(GREEN_LED_PIN, LOW);
+        digitalWrite(RED_LED_PIN, HIGH);
         Serial.println("entering infinite loop");
     }
 };

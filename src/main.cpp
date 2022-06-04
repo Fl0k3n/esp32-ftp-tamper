@@ -27,6 +27,7 @@ TaskHandle_t LightSensorTask;
 TaskHandle_t movementDetectionTaskHandle;
 
 void infLoop() {
+    signaler.signalInfiniteLoopEntered();
     while (true) {}
 }
 
@@ -202,10 +203,9 @@ void initPreferences() {
 }
 
 void setup() {
+    signaler.init();
     initSerial();
     initSD();
-    signaler.init();
-    delay(2000);
     initPreferences();
 
     prefs.printPrefs();
@@ -262,7 +262,7 @@ void setup() {
         &movementDetectionTaskHandle,
         0);
 
-    Serial.println("setup done");
+    signaler.signalSetupFinished();
 }
 
 

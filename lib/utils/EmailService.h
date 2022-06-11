@@ -20,8 +20,8 @@ public:
         msg.subject = title;
         msg.message = message;
 
-        EMailSender::Response response = emailSender.send(&emailRecipient, 1, msg);
-        Serial.println("Sending warning mails status: ");
+        EMailSender::Response response = emailSender.send(emailRecipient, msg);
+        Serial.println("Sending warning mails status to " + String(emailRecipient) + ": ");
         Serial.println("code: " + response.code);
         Serial.println("desc: " + response.desc);
     }

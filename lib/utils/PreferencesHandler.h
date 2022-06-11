@@ -121,28 +121,33 @@ public:
     bool loadFromSDCard() {
         File cfg = SD.open(CONFIG_FILENAME, FILE_READ);
         if (!cfg) {
+            Serial.println("Config file not found at " + String(CONFIG_FILENAME));
             return false;
         }
 
         int fileLen = 0;
         while (true) {
             String line = cfg.readStringUntil('\n');
-            fileLen += line.length();
-            Serial.println("Reading line: ->" + line + "<-");
+            if (line.endsWith("\r"))
+                line = line.substring(0, line.length() - 1);
+
+            fileLen += line.length() + 1;
 
             if (line.length() == 0) {
                 break;
             }
 
             int sep = line.indexOf("=");
-            if (sep == -1)
+            if (sep == -1) {
+                Serial.println("Invalid option " + line);
                 return false;
+            }
 
             String propertyName = line.substring(0, sep);
-            String propertyValue = line.substring(sep + 1, line.length() - 1);
+            String propertyValue = line.substring(sep + 1, line.length());
 
             if (!isValid(propertyName, propertyValue)) {
-                Serial.println("invalid property: " + propertyName + " with value: " + propertyValue);
+                Serial.println("invalid property: " + propertyName + " with value: ->" + propertyValue + "<-");
                 return false;
             }
 
@@ -184,6 +189,7 @@ public:
     }
 
     bool loadFromSDIfPresent() {
+        Serial.println("Checking SD for config");
         return loadFromSDCard();
     }
 
@@ -241,6 +247,8 @@ public:
             cfg.println(String(CONFIG_KEYS[i]) + "=" + *vals[i]);
         }
 
+        cfg.print("/n");
+
         cfg.close();
     }
 
@@ -270,7 +278,6 @@ public:
         return retriesLeft;
     }
 
-    // for testing only (for now)
     void flushConfig() {
         for (int i = 0; i < KEYS_COUNT; i++) {
             prefs.remove(CONFIG_KEYS[i]);

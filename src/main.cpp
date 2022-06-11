@@ -15,16 +15,29 @@
 #define BAUD 115200
 #define WIFI_INIT_TIMEOUT 15
 #define LED_PIN 2
+#define TASKS_TO_STOP_COUNT 4
+#define KEYPAD_BUFF_SIZE 12
+
+#define LIGHT_SENSOR_THRESHOLD 16
+#define ACCCELERO_THRESHOLD 0.3
+#define GYRO_THRESHOLD 0.2
 
 PreferencesHandler prefs;
 StateSignaler signaler;
 TamperGuard* tamperGuard;
 
 TaskHandle_t tamperGuardTaskHandle;
-TaskHandle_t FTPServerTask;
-TaskHandle_t KeypadModuleTask;
-TaskHandle_t LightSensorTask;
+TaskHandle_t FTPServerTaskHandle;
+TaskHandle_t keypadModuleTaskHandle;
+TaskHandle_t lightSensorTaskHandle;
 TaskHandle_t movementDetectionTaskHandle;
+
+TaskHandle_t* tasksToStop[TASKS_TO_STOP_COUNT] = {
+    &FTPServerTaskHandle,
+    &keypadModuleTaskHandle,
+    &lightSensorTaskHandle,
+    &movementDetectionTaskHandle
+};
 
 void infLoop() {
     signaler.signalInfiniteLoopEntered();
@@ -51,53 +64,55 @@ void ftpServerTask(void*) {
 
 void tamperGuardTask(void*) {
     EmailService emailService(prefs.email.c_str(), prefs.emailPasswd.c_str(), prefs.emailToNotify.c_str());
-    TamperGuard guard(&emailService, &prefs, &signaler, { &FTPServerTask }, 1);
+    TamperGuard guard(&emailService, &prefs, &signaler, tasksToStop, TASKS_TO_STOP_COUNT);
+
     tamperGuard = &guard;
     tamperGuard->run();
 }
 
 void keypadModuleTask(void*) {
     KeypadModule keypadModule;
+    char buff[KEYPAD_BUFF_SIZE+1];
 
     while (true) {
-        bool isCorrect = keypadModule.awaitExactInput(prefs.pin);
+        size_t inputSize = keypadModule.awaitInput(buff, KEYPAD_BUFF_SIZE);
 
-        tamperGuard->registerIntrusion({
-            .detector = KEYPAD,
-            .timestamp = xTaskGetTickCount(),
-            .sensorData = (void*)(isCorrect ? CORRECT_PIN : INCORRECT_PIN)
-            });
+        if (inputSize > 0) {
+            buff[inputSize] = '\0';
+            tamperGuard->registerIntrusion({
+                .detector = KEYPAD,
+                .timestamp = xTaskGetTickCount(),
+                .sensorData = (void*)buff
+                });
+        }
     }
 }
 
 void lightSensorTask(void*) {
-    LightSensor lightSensor = LightSensor();
+    LightSensor lightSensor = LightSensor(LIGHT_SENSOR_THRESHOLD);
+    lightSensor.calibrate();
 
     while (true) {
-        int val = lightSensor.readValueFromLightSensor();
+        lightSensor.processNewLightValue();
 
-        // Serial.println("Light sensor: " + String(val));
-
-        lightSensor.processNewLightValue(val);
         if (lightSensor.checkForAnomaly()) {
             tamperGuard->registerIntrusion({
                 .detector = LIGHT,
                 .timestamp = xTaskGetTickCount()
                 });
 
-            lightSensor.resetAnomalies();
-            lightSensor.resetLightValues();
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            lightSensor.calibrate();
         }
 
-        vTaskDelay(200);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
-    vTaskDelete(NULL);
 }
 
 void movementDetectionTask(void*) {
     MotionSensor motionSensor;
-    if (!motionSensor.init(0.3, 0.2)) {
-        Serial.println("Failed to init MPU, check I2C connection");
+    if (!motionSensor.init(ACCCELERO_THRESHOLD, GYRO_THRESHOLD)) {
+        Serial.println("Failed to init motion sensor, check I2C connection");
         vTaskDelete(NULL);
     }
 
@@ -156,6 +171,27 @@ void connectToWiFi() {
     Serial.println(WiFi.localIP());
 }
 
+void assertValidPinEnteredOnInit() {
+    KeypadModule keypad;
+    Serial.println("Preferences found, please enter PIN");
+
+    while (prefs.getPinRetriesLeft() > 0) {
+        if (keypad.awaitExactInput(prefs.pin)) {
+            prefs.resetPinRetries();
+            break;
+        }
+        else {
+            prefs.setPinRetriesLeft(prefs.getPinRetriesLeft() - 1);
+            Serial.printf("Invalid PIN, you have %d retries left\n", prefs.getPinRetriesLeft());
+        }
+    }
+
+    if (prefs.getPinRetriesLeft() <= 0) {
+        prefs.clearSecrets();
+        Serial.println("Preferences cleared, aborting init...");
+        infLoop();
+    }
+}
 
 void initPreferences() {
     if (!prefs.begin()) {
@@ -171,46 +207,63 @@ void initPreferences() {
         else {
             Serial.println("Using new config from SD");
         }
+        
     }
-    else {
-        // prefs.flushConfig();
-        KeypadModule keypad;
-        Serial.println("Preferences found, please enter PIN");
-        prefs.printPrefs(); // TODO testing only
-
-        while (prefs.getPinRetriesLeft() > 0) {
-            if (keypad.awaitExactInput(prefs.pin)) {
-                prefs.resetPinRetries();
-                break;
-            }
-            else {
-                prefs.setPinRetriesLeft(prefs.getPinRetriesLeft() - 1);
-                Serial.printf("Invalid PIN, you have %d retries left\n", prefs.getPinRetriesLeft());
-            }
-        }
-
-        if (prefs.getPinRetriesLeft() <= 0) {
-            prefs.clearSecrets();
-            prefs.printPrefs();
-            Serial.println("Preferences cleared, aborting init...");
-            infLoop();
-        }
-
-        if (prefs.loadFromSDIfPresent()) {
-            Serial.println("Using new config from SD");
-        }
+    else if (prefs.loadFromSDIfPresent()) {
+        Serial.println("Using new config from SD");
     }
+
+    assertValidPinEnteredOnInit();
 }
 
 void setup() {
     signaler.init();
     initSerial();
     initSD();
+
+    delay(2000);
     initPreferences();
 
-    prefs.printPrefs();
-
     connectToWiFi();
+
+    xTaskCreatePinnedToCore(
+        ftpServerTask, /* Task function. */
+        "FTPServer",     /* name of task. */
+        8192,    /* Stack size of task */
+        NULL,      /* parameter of the task */
+        1,         /* priority of the task */
+        &FTPServerTaskHandle,  /* Task handle to keep track of created task */
+        1          /* Core where the task should run */
+    );
+
+    xTaskCreatePinnedToCore(
+        keypadModuleTask,
+        "keypadModuleTask",
+        8192,
+        NULL,
+        1,
+        &keypadModuleTaskHandle,
+        0
+    );
+
+    xTaskCreatePinnedToCore(
+        lightSensorTask,
+        "lightSensorTask",
+        8192,
+        NULL,
+        2,
+        &lightSensorTaskHandle,
+        0
+    );
+
+    xTaskCreatePinnedToCore(
+        movementDetectionTask,
+        "movementDetectionTask",
+        8192,
+        NULL,
+        2,
+        &movementDetectionTaskHandle,
+        0);
 
     // assert that this task has max priority
     xTaskCreatePinnedToCore(
@@ -220,46 +273,6 @@ void setup() {
         NULL,
         10,
         &tamperGuardTaskHandle,
-        0);
-
-
-    xTaskCreatePinnedToCore(
-        ftpServerTask, /* Task function. */
-        "FTPServer",     /* name of task. */
-        8192,    /* Stack size of task */
-        NULL,      /* parameter of the task */
-        1,         /* priority of the task */
-        &FTPServerTask,  /* Task handle to keep track of created task */
-        1          /* Core where the task should run */
-    );
-
-    xTaskCreatePinnedToCore(
-        keypadModuleTask,
-        "KeypadModuleTask",
-        8192,
-        NULL,
-        1,
-        &KeypadModuleTask,
-        0
-    );
-
-    xTaskCreatePinnedToCore(
-        lightSensorTask,
-        "LightSensorTask",
-        8192,
-        NULL,
-        1,
-        &LightSensorTask,
-        0
-    );
-
-    xTaskCreatePinnedToCore(
-        movementDetectionTask,
-        "movementDetectionTask",
-        8192,
-        NULL,
-        1,
-        &movementDetectionTaskHandle,
         0);
 
     signaler.signalSetupFinished();

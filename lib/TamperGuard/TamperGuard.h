@@ -18,7 +18,7 @@
 typedef enum tamper_sensor_t {
     MOTION,  // data is NULL
     LIGHT,   // data is NULL
-    KEYPAD,  // data is int which equals 1 iff pin was entered correctly
+    KEYPAD,  // data is ptr to null terminated char* entered on keypad
     TIMER,   // data is NULL
 } tamper_sensor_t;
 
@@ -50,7 +50,7 @@ private:
     PreferencesHandler* prefs;
     StateSignaler* signaler;
 
-    xTaskHandle* tasksToStop;
+    xTaskHandle** tasksToStop;
     int tasksToStopCount;
 
     SecurityMode mode;
@@ -63,8 +63,13 @@ private:
 
     void switchToSecureMode();
     void switchToUnsecureMode(bool shouldStopTimer);
+
+    bool isPinCorrect(char*);
+    void handleKeypadInputInSecureMode(char*);
+
+    void stopAll();
 public:
-    TamperGuard(EmailService*, PreferencesHandler*, StateSignaler*, xTaskHandle*, int);
+    TamperGuard(EmailService*, PreferencesHandler*, StateSignaler*, xTaskHandle**, int);
     void registerIntrusion(Intrusion);
     void enterSecurityMode(SecurityMode);
     void run();

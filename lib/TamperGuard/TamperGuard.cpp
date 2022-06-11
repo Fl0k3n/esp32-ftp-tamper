@@ -2,7 +2,7 @@
 
 
 TamperGuard::TamperGuard(EmailService* emailService, PreferencesHandler* prefs, StateSignaler* stateSignaler,
-    xTaskHandle* tasksToStop, int taskCount)
+    xTaskHandle** tasksToStop, int taskCount)
     : emailService(emailService), prefs(prefs), signaler(stateSignaler),
     tasksToStop(tasksToStop), tasksToStopCount(taskCount), mode(UNSECURE), invalidPinRetries(0) {
 
@@ -43,54 +43,47 @@ void TamperGuard::handleIntrusion(Intrusion intrusion) {
 
     if (mode == SECURE) {
         if (intrusion.detector == KEYPAD) {
-            if ((int)intrusion.sensorData == CORRECT_PIN) {
-                switchToUnsecureMode(true);
-            }
-            else {
-                // no idea what should we do here
-                Serial.println("Invalid pin");
-            }
+            handleKeypadInputInSecureMode((char*) intrusion.sensorData);
         }
-        else if (intrusion.detector != TIMER) {
+
+        if (intrusion.detector != TIMER) {
             timeoutTask = timeoutHandler.resetTimeout(
                 timeoutTask, &timeoutArgs);
-        }
+        } 
         else {
             Serial.println("Secure mode timed out");
             switchToUnsecureMode(false);
         }
-
-        return;
     }
-
-
-    switch (intrusion.detector)
-    {
-    case MOTION:
-        Serial.println("motion sensor detected movement");
-        handleSecurityBreach();
-        break;
-    case LIGHT:
-        Serial.println("light sensor detected light");
-        handleSecurityBreach();
-        break;
-    case KEYPAD:
-        handleKeypadIntrusion(intrusion);
-        break;
-    default:
-        Serial.printf("Undefined sensor %d\n", intrusion.detector);
+    else {
+        switch (intrusion.detector)
+        {
+        case MOTION:
+            Serial.println("motion sensor detected movement");
+            handleSecurityBreach();
+            break;
+        case LIGHT:
+            Serial.println("light sensor detected light");
+            handleSecurityBreach();
+            break;
+        case KEYPAD:
+            handleKeypadIntrusion(intrusion);
+            break;
+        default:
+            Serial.printf("Undefined sensor %d\n", intrusion.detector);
+        }
     }
 }
 
 
 void TamperGuard::handleKeypadIntrusion(Intrusion intrusion) {
-    int keypadData = (int)intrusion.sensorData;
+    char* keypadInput = (char*)intrusion.sensorData;
 
-    if (keypadData == CORRECT_PIN) {
+    if (isPinCorrect(keypadInput)) {
         switchToSecureMode();
     }
     else {
-        Serial.printf("Got %d from keypad\n", keypadData);
+        Serial.printf("Got %s from keypad\n", keypadInput);
         invalidPinRetries++;
 
         if (invalidPinRetries == MAX_PIN_RETRIES) {
@@ -101,15 +94,10 @@ void TamperGuard::handleKeypadIntrusion(Intrusion intrusion) {
 }
 
 void TamperGuard::handleSecurityBreach() {
-    // prefs->clearSecrets();
-    emailService->sendEmail("TAMPER WARNING - ESP32 FTP SERVER", "check this out");
+    prefs->clearSecrets();
+    emailService->sendEmail("TAMPER WARNING - ESP32 FTP SERVER", "Intrusion detected!");
 
-    for (int i = 0; i < tasksToStopCount; i++) {
-        vTaskSuspend(tasksToStop[i]);
-    }
-
-    signaler->signalInfiniteLoopEntered();
-    vTaskDelete(NULL);
+    stopAll();
 }
 
 
@@ -129,4 +117,38 @@ void TamperGuard::switchToUnsecureMode(bool shouldStopTimer) {
     if (shouldStopTimer) {
         timeoutHandler.cancelTimeout(timeoutTask);
     }
+}
+
+bool TamperGuard::isPinCorrect(char* keypadInput) {
+    return prefs->pin.equals(keypadInput);
+}
+
+void TamperGuard::handleKeypadInputInSecureMode(char* keypadInput) {
+    if (isPinCorrect(keypadInput)) {
+        switchToUnsecureMode(true);
+    }
+    else if (strcmp("A", keypadInput) == 0) {
+        prefs->printPrefs();
+    }
+    else if (strcmp("DDDD", keypadInput) == 0) {
+        prefs->flushConfig();
+        Serial.println("Config removed, restarting the device...");
+        ESP.restart();
+    }
+    else if (strcmp("ABCD", keypadInput) == 0) {
+        Serial.println("restarting the device...");
+        ESP.restart();
+    }
+    else {
+        Serial.println("Unexpected keypad input: " + String(keypadInput));
+    }
+
+}
+void TamperGuard::stopAll() {
+    for (int i = 0; i < tasksToStopCount; i++) {
+        vTaskSuspend(*tasksToStop[i]);
+    }
+
+    signaler->signalInfiniteLoopEntered();
+    vTaskDelete(NULL);
 }

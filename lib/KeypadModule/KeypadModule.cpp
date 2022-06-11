@@ -1,10 +1,9 @@
 #include "KeypadModule.h"
 
 bool KeypadModule::awaitExactInput(String exact) {
-
-    String inputPin;
-    inputPin.reserve(exact.length());
-    inputPin = "";
+    String input;
+    input.reserve(exact.length());
+    input = "";
 
     while (true) {
         char key = keypad.getKey();
@@ -13,14 +12,14 @@ bool KeypadModule::awaitExactInput(String exact) {
             Serial.print(key);
             if (key == '*') {
                 Serial.println("Keypad input cleared");
-                inputPin = "";
+                input = "";
             }
             else if (key == '#') {
-                Serial.println(inputPin);
-                return inputPin == exact;
+                Serial.println(input);
+                return input == exact;
             }
             else {
-                inputPin += key;
+                input += key;
             }
         }
         vTaskDelay(1);
@@ -32,19 +31,20 @@ bool KeypadModule::awaitExactInput(String exact) {
 size_t KeypadModule::awaitInput(char* buff, int maxLen) {
     size_t i = 0;
 
-    for (;i < maxLen; i++) {
+    for (;i < maxLen;) {
         char key = keypad.getKey();
-
-        switch (key) {
-        case '*':
-            i = 0;
-            break;
-        case '#':
-            return i;
-        case '\0':
-            break;
-        default:
-            buff[i] = key;
+        if (key) {
+            Serial.print(key);
+            switch (key) {
+            case '*':
+                i = 0;
+                break;
+            case '#':
+                return i;
+            default:
+                buff[i] = key;
+                i++;
+            }
         }
 
         vTaskDelay(1);

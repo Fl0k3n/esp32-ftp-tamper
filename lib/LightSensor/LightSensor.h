@@ -5,19 +5,25 @@
 
 #define ANALOG_PIN 36
 #define LIGHT_VALUES 20
-#define ANOMALIES 4
+#define ANOMALIES 3
 
 class LightSensor {
 private:
-    int lightValuesIndex = 0;
-    int anomaliesIndex = 0;
-    int lightValues[LIGHT_VALUES] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
-    bool anomalies[ANOMALIES] = { false, false, false, false };
+    int anomalyThreshold;
+    int lightValuesIndex;
+    int calibratedLightValue;
+    int anomaliesIndex;
+    int lightValues[LIGHT_VALUES];
+    bool anomalies[ANOMALIES];
+
+    int getMeanLightValue();
 public:
+    LightSensor(int);
     void resetLightValues();
     void resetAnomalies();
+    void calibrate();
     int readValueFromLightSensor();
-    bool processNewLightValue(int val);
+    bool processNewLightValue();
     bool checkForAnomaly();
 };
 

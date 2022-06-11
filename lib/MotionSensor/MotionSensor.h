@@ -159,7 +159,6 @@ public:
 
                 if (anyGyroGreaterThan(diff, gyroThreshold / 2) || anyAccelerationGreaterThan(diff, acceleroThreshold / 2)) {
                     Serial.println("don't move the board!");
-                    diff.print();
                     break;
                 }
             }
@@ -171,7 +170,6 @@ public:
         idle = computeAverageReading();
 
         Serial.println("Calibrated!");
-        idle.print();
     }
 
     MPUSensorReading readSensorState() {
@@ -189,33 +187,14 @@ public:
     };
 
     bool isMovementDetected() {
-        // TODO this method should be experimentally adjusted once we build the container
 
         MPUSensorReading reading = readSensorState();
-        // bufferReading(reading);
-        // MPUSensorReading avgReading = computeAvgReadingOfLast(4);
-
-        // Serial.println();
-        // MPUSensorReading relativeDiff = computeRelativeDiff(avgReading, idle);
-        // Serial.println("Relative diff: ");
-        // relativeDiff.print();
-
         MPUSensorReading absoluteDiff = computeAbsoluteDiff(reading, idle);
-        // Serial.println("Absolute diff:");
-        // absoluteDiff.print();
-
         if (anyAccelerationGreaterThan(absoluteDiff, acceleroThreshold)) {
-            Serial.println("Accelero detected movement!!!!!!!!!");
-            if (anyGyroGreaterThan(absoluteDiff, gyroThreshold)) {
-                Serial.println("And so did Gyro!!!!!!!");
-            }
-            absoluteDiff.print();
             return true;
         }
 
         if (anyGyroGreaterThan(absoluteDiff, gyroThreshold)) {
-            Serial.println("Only gyro detected movement!!!!!!!");
-            absoluteDiff.print();
             return true;
         }
 
